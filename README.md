@@ -19,6 +19,12 @@ A full-stack web application that visualizes the complete timeline of the univer
 - **Event Details**: View descriptions, categories, sources, and discussions
 - **Embeddable**: Can be embedded in other websites
 
+
+## Policy
+
+- do not use hardcoded situations 
+- do not use fallbacks without being specified
+
 ## Quick Start
 
 ```bash

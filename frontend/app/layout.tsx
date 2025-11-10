@@ -1,5 +1,12 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { Roboto_Condensed } from 'next/font/google'
+
+const robotoCondensed = Roboto_Condensed({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'Timeline - From Big Bang to Now',
@@ -12,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={robotoCondensed.className}>
       <body>{children}</body>
     </html>
   )

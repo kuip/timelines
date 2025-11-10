@@ -23,10 +23,10 @@ func NewEventRepository(db *DB) *EventRepository {
 func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) (*models.Event, error) {
 	query := `
 		INSERT INTO events (
-			timeline_seconds, precision_level, uncertainty_range,
+			unix_seconds, unix_nanos, precision_level, uncertainty_range,
 			title, description, category, created_by_user_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, timeline_seconds, precision_level, uncertainty_range,
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
 		          title, description, category, importance_score,
 		          created_at, updated_at, created_by_user_id
 	`
@@ -34,7 +34,8 @@ func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) 
 	event := &models.Event{}
 	err := r.db.QueryRow(
 		query,
-		req.TimelineSeconds,
+		req.UnixSeconds,
+		req.UnixNanos,
 		req.PrecisionLevel,
 		req.UncertaintyRange,
 		req.Title,
@@ -44,6 +45,8 @@ func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) 
 	).Scan(
 		&event.ID,
 		&event.TimelineSeconds,
+		&event.UnixSeconds,
+		&event.UnixNanos,
 		&event.PrecisionLevel,
 		&event.UncertaintyRange,
 		&event.Title,
@@ -65,7 +68,7 @@ func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) 
 // GetByID retrieves an event by ID
 func (r *EventRepository) GetByID(id string) (*models.Event, error) {
 	query := `
-		SELECT id, timeline_seconds, precision_level, uncertainty_range,
+		SELECT id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
 		       title, description, category, importance_score,
 		       created_at, updated_at, created_by_user_id
 		FROM events
@@ -76,6 +79,8 @@ func (r *EventRepository) GetByID(id string) (*models.Event, error) {
 	err := r.db.QueryRow(query, id).Scan(
 		&event.ID,
 		&event.TimelineSeconds,
+		&event.UnixSeconds,
+		&event.UnixNanos,
 		&event.PrecisionLevel,
 		&event.UncertaintyRange,
 		&event.Title,
@@ -101,7 +106,7 @@ func (r *EventRepository) GetByID(id string) (*models.Event, error) {
 func (r *EventRepository) List(params models.EventQueryParams) ([]models.Event, error) {
 	// Build query
 	query := `
-		SELECT id, timeline_seconds, precision_level, uncertainty_range,
+		SELECT id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
 		       title, description, category, importance_score,
 		       created_at, updated_at, created_by_user_id
 		FROM public.events
@@ -113,13 +118,13 @@ func (r *EventRepository) List(params models.EventQueryParams) ([]models.Event, 
 
 	// Add filters
 	if params.StartSeconds != nil {
-		query += fmt.Sprintf(" AND timeline_seconds >= $%d", argCount)
+		query += fmt.Sprintf(" AND unix_seconds >= $%d", argCount)
 		args = append(args, params.StartSeconds)
 		argCount++
 	}
 
 	if params.EndSeconds != nil {
-		query += fmt.Sprintf(" AND timeline_seconds <= $%d", argCount)
+		query += fmt.Sprintf(" AND unix_seconds <= $%d", argCount)
 		args = append(args, params.EndSeconds)
 		argCount++
 	}
@@ -142,8 +147,8 @@ func (r *EventRepository) List(params models.EventQueryParams) ([]models.Event, 
 		argCount++
 	}
 
-	// Order by timeline
-	query += " ORDER BY timeline_seconds ASC"
+	// Order by unix_seconds for proper chronological ordering
+	query += " ORDER BY unix_seconds ASC"
 
 	// Add pagination
 	if params.Limit > 0 {
@@ -175,6 +180,8 @@ func (r *EventRepository) List(params models.EventQueryParams) ([]models.Event, 
 		err := rows.Scan(
 			&event.ID,
 			&event.TimelineSeconds,
+			&event.UnixSeconds,
+			&event.UnixNanos,
 			&event.PrecisionLevel,
 			&event.UncertaintyRange,
 			&event.Title,
@@ -201,9 +208,15 @@ func (r *EventRepository) Update(id string, req models.UpdateEventRequest) (*mod
 	args := []interface{}{}
 	argCount := 1
 
-	if req.TimelineSeconds != nil {
-		updates = append(updates, fmt.Sprintf("timeline_seconds = $%d", argCount))
-		args = append(args, req.TimelineSeconds)
+	if req.UnixSeconds != nil {
+		updates = append(updates, fmt.Sprintf("unix_seconds = $%d", argCount))
+		args = append(args, req.UnixSeconds)
+		argCount++
+	}
+
+	if req.UnixNanos != nil {
+		updates = append(updates, fmt.Sprintf("unix_nanos = $%d", argCount))
+		args = append(args, req.UnixNanos)
 		argCount++
 	}
 
@@ -248,7 +261,7 @@ func (r *EventRepository) Update(id string, req models.UpdateEventRequest) (*mod
 		UPDATE events
 		SET %s
 		WHERE id = $%d
-		RETURNING id, timeline_seconds, precision_level, uncertainty_range,
+		RETURNING id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
 		          title, description, category, importance_score,
 		          created_at, updated_at, created_by_user_id
 	`, strings.Join(updates, ", "), argCount)
@@ -257,6 +270,8 @@ func (r *EventRepository) Update(id string, req models.UpdateEventRequest) (*mod
 	err := r.db.QueryRow(query, args...).Scan(
 		&event.ID,
 		&event.TimelineSeconds,
+		&event.UnixSeconds,
+		&event.UnixNanos,
 		&event.PrecisionLevel,
 		&event.UncertaintyRange,
 		&event.Title,

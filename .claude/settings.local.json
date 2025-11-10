@@ -16,7 +16,16 @@
       "Bash(cat:*)",
       "Bash(DB_NAME=timeline DB_USER=postgres DB_HOST=localhost DB_PORT=5432 DB_SSLMODE=disable go run:*)",
       "Bash(python3:*)",
-      "Bash(env)"
+      "Bash(env)",
+      "Bash(npm install:*)",
+      "Bash(pkill:*)",
+      "Bash(find:*)",
+      "Bash(go build:*)",
+      "Bash(/usr/bin/curl -s 'http://localhost:8080/api/events?limit=1')",
+      "Bash(/usr/bin/curl -s 'http://localhost:8080/api/events?limit=2')",
+      "Bash(/usr/bin/curl -s 'http://localhost:8080/api/events?limit=3')",
+      "Bash(/usr/bin/curl:*)",
+      "Bash(node:*)"
     ],
     "deny": [],
     "ask": []

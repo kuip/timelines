@@ -3,7 +3,6 @@ package models
 import (
 	"time"
 
-	"github.com/shopspring/decimal"
 	"github.com/timeline/backend/internal/utils"
 )
 
@@ -11,8 +10,10 @@ import (
 type Event struct {
 	ID       string `json:"id" db:"id"`
 
-	// Time representation
+	// Time representation (Big Bang-relative for backward compat, will migrate to Unix Epoch)
 	TimelineSeconds  string  `json:"timeline_seconds" db:"timeline_seconds"`
+	UnixSeconds      int64   `json:"unix_seconds" db:"unix_seconds"`
+	UnixNanos        int32   `json:"unix_nanos" db:"unix_nanos"`
 	PrecisionLevel   utils.PrecisionLevel `json:"precision_level" db:"precision_level"`
 	UncertaintyRange *string `json:"uncertainty_range,omitempty" db:"uncertainty_range"`
 
@@ -31,9 +32,10 @@ type Event struct {
 
 // CreateEventRequest represents the request to create a new event
 type CreateEventRequest struct {
-	TimelineSeconds  decimal.Decimal       `json:"timeline_seconds" binding:"required"`
+	UnixSeconds      int64                 `json:"unix_seconds" binding:"required"`
+	UnixNanos        int32                 `json:"unix_nanos" binding:"omitempty"`
 	PrecisionLevel   utils.PrecisionLevel  `json:"precision_level" binding:"required"`
-	UncertaintyRange *decimal.Decimal      `json:"uncertainty_range,omitempty"`
+	UncertaintyRange *int64                `json:"uncertainty_range,omitempty"`
 	Title            string                `json:"title" binding:"required,max=500"`
 	Description      *string               `json:"description,omitempty"`
 	Category         *string               `json:"category,omitempty"`
@@ -41,9 +43,10 @@ type CreateEventRequest struct {
 
 // UpdateEventRequest represents the request to update an event
 type UpdateEventRequest struct {
-	TimelineSeconds  *decimal.Decimal      `json:"timeline_seconds,omitempty"`
+	UnixSeconds      *int64                `json:"unix_seconds,omitempty"`
+	UnixNanos        *int32                `json:"unix_nanos,omitempty"`
 	PrecisionLevel   *utils.PrecisionLevel `json:"precision_level,omitempty"`
-	UncertaintyRange *decimal.Decimal      `json:"uncertainty_range,omitempty"`
+	UncertaintyRange *int64                `json:"uncertainty_range,omitempty"`
 	Title            *string               `json:"title,omitempty" binding:"omitempty,max=500"`
 	Description      *string               `json:"description,omitempty"`
 	Category         *string               `json:"category,omitempty"`
@@ -51,9 +54,9 @@ type UpdateEventRequest struct {
 
 // EventQueryParams represents query parameters for listing events
 type EventQueryParams struct {
-	// Time range filtering
-	StartSeconds *decimal.Decimal `form:"start"`
-	EndSeconds   *decimal.Decimal `form:"end"`
+	// Time range filtering (Unix seconds since 1970)
+	StartSeconds *int64 `form:"start"`
+	EndSeconds   *int64 `form:"end"`
 
 	// Filtering
 	Category        *string `form:"category"`

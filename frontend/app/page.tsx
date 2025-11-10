@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Timeline from '@/components/Timeline';
+import TimelineCanvas from '@/components/TimelineCanvas';
+import EventPanel from '@/components/EventPanel';
 import { EventResponse } from '@/types';
 import { eventsApi } from '@/lib/api';
 
@@ -10,6 +11,18 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<EventResponse | null>(null);
+  const [transform, setTransform] = useState({ y: 0, k: 1 });
+  const [visibleEvents, setVisibleEvents] = useState<EventResponse[]>([]);
+
+  // Load transform from URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const y = parseFloat(params.get('y') || '0');
+    const k = parseFloat(params.get('k') || '1');
+    if (!isNaN(y) || !isNaN(k)) {
+      setTransform({ y: !isNaN(y) ? y : 0, k: !isNaN(k) ? k : 1 });
+    }
+  }, []);
 
   useEffect(() => {
     loadEvents();
@@ -36,9 +49,48 @@ export default function Home() {
     setSelectedEvent(event);
   };
 
-  const closeEventDetails = () => {
-    setSelectedEvent(null);
+  // Handle timeline transform - just update transform and URL, don't update selection
+  const handleTimelineTransform = (newTransform: { y: number; k: number }) => {
+    // Update URL with current transform
+    const params = new URLSearchParams();
+    params.set('y', newTransform.y.toFixed(2));
+    params.set('k', newTransform.k.toFixed(2));
+    window.history.replaceState({}, '', `?${params.toString()}`);
+
+    // Update local state - this will trigger auto-selection via useEffect
+    setTransform(newTransform);
   };
+
+  // Auto-select closest event to viewport center from visible events
+  useEffect(() => {
+    if (visibleEvents.length > 0) {
+      const margin = 20;
+      const timelineHeight = window.innerHeight - margin * 2;
+      const timelineTop = margin;
+      const centerViewportY = timelineTop + timelineHeight / 2;
+
+      const START_TIME = -435494878264400000;
+      const END_TIME = 435457000000000000;
+
+      let closestEvent: EventResponse | null = null;
+      let closestDistance = Infinity;
+
+      visibleEvents.forEach((event) => {
+        const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
+        const eventY = timelineTop + ((END_TIME - unixSeconds) / (END_TIME - START_TIME)) * timelineHeight * transform.k + transform.y;
+        const distance = Math.abs(eventY - centerViewportY);
+
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestEvent = event;
+        }
+      });
+
+      if (closestEvent) {
+        setSelectedEvent(closestEvent);
+      }
+    }
+  }, [visibleEvents, transform]);
 
   if (loading) {
     return (
@@ -69,89 +121,16 @@ export default function Home() {
   }
 
   return (
-    <main className="relative min-h-screen">
-      {/* Timeline Component */}
-      <Timeline events={events} onEventClick={handleEventClick} />
+    <main className="flex h-screen w-screen bg-gray-900 text-white" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
+      {/* Canvas Timeline - Left 15% (narrower) */}
+      <div className="w-[15%] h-full border-r border-gray-700">
+        <TimelineCanvas events={events} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onVisibleEventsChange={setVisibleEvents} initialTransform={transform} />
+      </div>
 
-      {/* Event Details Modal */}
-      {selectedEvent && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-          onClick={closeEventDetails}
-        >
-          <div
-            className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-2xl font-bold">{selectedEvent.title}</h2>
-              <button
-                onClick={closeEventDetails}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <span className="font-semibold">Time: </span>
-                <span>{selectedEvent.formatted_time}</span>
-              </div>
-
-              {selectedEvent.category && (
-                <div>
-                  <span className="font-semibold">Category: </span>
-                  <span className="inline-block px-2 py-1 bg-blue-100 dark:bg-blue-900 rounded text-sm">
-                    {selectedEvent.category}
-                  </span>
-                </div>
-              )}
-
-              {selectedEvent.description && (
-                <div>
-                  <span className="font-semibold block mb-2">Description:</span>
-                  <p className="text-gray-700 dark:text-gray-300">{selectedEvent.description}</p>
-                </div>
-              )}
-
-              <div>
-                <span className="font-semibold">Precision: </span>
-                <span>{selectedEvent.precision_level}</span>
-              </div>
-
-              {selectedEvent.uncertainty_range && (
-                <div>
-                  <span className="font-semibold">Uncertainty: </span>
-                  <span>±{selectedEvent.uncertainty_range} seconds</span>
-                </div>
-              )}
-
-              <div>
-                <span className="font-semibold">Importance Score: </span>
-                <span>{selectedEvent.importance_score}</span>
-              </div>
-
-              <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
-                <div className="flex gap-4 text-sm text-gray-600 dark:text-gray-400">
-                  <span>{selectedEvent.source_count} sources</span>
-                  <span>{selectedEvent.discussion_count} discussions</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Info Banner */}
-      {events.length === 0 && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-          <h2 className="text-2xl font-bold mb-2">No Events Yet</h2>
-          <p className="text-gray-600 dark:text-gray-400">
-            The timeline is empty. Add events through the API.
-          </p>
-        </div>
-      )}
+      {/* Event Panel - Right 85% */}
+      <div className="w-[85%] h-full overflow-y-auto">
+        <EventPanel selectedEvent={selectedEvent} events={events} visibleEvents={visibleEvents} transform={transform} />
+      </div>
     </main>
   );
 }

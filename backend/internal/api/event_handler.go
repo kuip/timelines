@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/shopspring/decimal"
 	"github.com/timeline/backend/internal/db"
 	"github.com/timeline/backend/internal/models"
 	"github.com/timeline/backend/internal/utils"
@@ -38,11 +37,10 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 	}
 
 	// Convert to response with formatted time
-	timelineSeconds, _ := decimal.NewFromString(event.TimelineSeconds)
 	response := models.EventResponse{
-		Event:         *event,
-		FormattedTime: utils.FormatTimelineForDisplay(timelineSeconds),
-		SourceCount:   0,
+		Event:           *event,
+		FormattedTime:   utils.FormatTimelineForDisplay(event.UnixSeconds, event.UnixNanos),
+		SourceCount:     0,
 		DiscussionCount: 0,
 	}
 
@@ -60,10 +58,9 @@ func (h *EventHandler) GetEvent(c *gin.Context) {
 	}
 
 	// Convert to response with formatted time
-	timelineSeconds, _ := decimal.NewFromString(event.TimelineSeconds)
 	response := models.EventResponse{
 		Event:         *event,
-		FormattedTime: utils.FormatTimelineForDisplay(timelineSeconds),
+		FormattedTime:   utils.FormatTimelineForDisplay(event.UnixSeconds, event.UnixNanos),
 		SourceCount:   0,
 		DiscussionCount: 0,
 	}
@@ -93,10 +90,9 @@ func (h *EventHandler) ListEvents(c *gin.Context) {
 	// Convert to response format
 	responses := make([]models.EventResponse, len(events))
 	for i, event := range events {
-		timelineSeconds, _ := decimal.NewFromString(event.TimelineSeconds)
-		responses[i] = models.EventResponse{
+			responses[i] = models.EventResponse{
 			Event:         event,
-			FormattedTime: utils.FormatTimelineForDisplay(timelineSeconds),
+			FormattedTime:   utils.FormatTimelineForDisplay(event.UnixSeconds, event.UnixNanos),
 			SourceCount:   0,
 			DiscussionCount: 0,
 		}
@@ -127,10 +123,9 @@ func (h *EventHandler) UpdateEvent(c *gin.Context) {
 	}
 
 	// Convert to response with formatted time
-	timelineSeconds, _ := decimal.NewFromString(event.TimelineSeconds)
 	response := models.EventResponse{
 		Event:         *event,
-		FormattedTime: utils.FormatTimelineForDisplay(timelineSeconds),
+		FormattedTime:   utils.FormatTimelineForDisplay(event.UnixSeconds, event.UnixNanos),
 		SourceCount:   0,
 		DiscussionCount: 0,
 	}
