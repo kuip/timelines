@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import TimelineCanvas from '@/components/TimelineCanvas';
 import EventPanel from '@/components/EventPanel';
 import { EventResponse } from '@/types';
@@ -13,6 +13,7 @@ export default function Home() {
   const [selectedEvent, setSelectedEvent] = useState<EventResponse | null>(null);
   const [transform, setTransform] = useState({ y: 0, k: 1 });
   const [visibleEvents, setVisibleEvents] = useState<EventResponse[]>([]);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load transform from URL on mount
   useEffect(() => {
@@ -20,7 +21,9 @@ export default function Home() {
     const y = parseFloat(params.get('y') || '0');
     const k = parseFloat(params.get('k') || '1');
     if (!isNaN(y) || !isNaN(k)) {
-      setTransform({ y: !isNaN(y) ? y : 0, k: !isNaN(k) ? k : 1 });
+      // Clamp zoom to reasonable range to prevent performance issues
+      const clampedK = Math.max(1, Math.min(1e18, !isNaN(k) ? k : 1));
+      setTransform({ y: !isNaN(y) ? y : 0, k: clampedK });
     }
   }, []);
 
@@ -51,14 +54,20 @@ export default function Home() {
 
   // Handle timeline transform - just update transform and URL, don't update selection
   const handleTimelineTransform = (newTransform: { y: number; k: number }) => {
-    // Update URL with current transform
-    const params = new URLSearchParams();
-    params.set('y', newTransform.y.toFixed(2));
-    params.set('k', newTransform.k.toFixed(2));
-    window.history.replaceState({}, '', `?${params.toString()}`);
-
-    // Update local state - this will trigger auto-selection via useEffect
+    // Update local state immediately
     setTransform(newTransform);
+
+    // Debounce URL updates to prevent throttling warnings
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      const params = new URLSearchParams();
+      params.set('y', newTransform.y.toFixed(2));
+      params.set('k', newTransform.k.toFixed(2));
+      window.history.replaceState({}, '', `?${params.toString()}`);
+    }, 300); // Update URL after 300ms of inactivity
   };
 
   // Auto-select closest event to viewport center from visible events

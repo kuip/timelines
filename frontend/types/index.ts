@@ -32,6 +32,7 @@ export interface EventResponse extends Event {
   vote_stats?: VoteStats;
   source_count: number;
   discussion_count: number;
+  image_url?: string;
 }
 
 export interface VoteStats {

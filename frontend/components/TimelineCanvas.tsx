@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { EventResponse } from '@/types';
+import { getEventImageUrl, calculateImageDimensions } from '@/lib/imageHelper';
 
 interface TimelineCanvasProps {
   events: EventResponse[];
@@ -21,6 +22,9 @@ const TIME_UNITS = [
   { quantity: 1, unit: 'hour', seconds: 3600 },
   { quantity: 1, unit: 'min', seconds: 60 },
   { quantity: 1, unit: 'sec', seconds: 1 },
+  { quantity: 1, unit: 'ms', seconds: 0.001 },
+  { quantity: 1, unit: 'μs', seconds: 0.000001 },
+  { quantity: 1, unit: 'ns', seconds: 0.000000001 },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -38,6 +42,8 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({ events, onEventClick, o
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [transform, setTransform] = useState(initialTransform || { y: 0, k: 1 });
+  const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
+  const [imagesLoaded, setImagesLoaded] = useState(0); // Trigger re-render when images load
 
   // START_TIME should be before Big Bang, END_TIME should be far future
   // Unix Epoch Big Bang is approximately -435494878264400000 seconds
@@ -105,10 +111,18 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({ events, onEventClick, o
     ctx.fillStyle = '#111827';
     ctx.fillRect(0, 0, dimensions.width, dimensions.height);
 
+    // Performance guard: if zoom causes visible range to be unreasonably small, skip unit rendering
+    const visibleRangeCheck = (END_TIME - START_TIME) / transform.k;
+    if (visibleRangeCheck < 1e-12) {
+      // Range smaller than 1 picosecond - skip rendering units to prevent browser hang
+      return;
+    }
+
     const margin = 20;
     const timelineX = dimensions.width / 2;
     const timelineHeight = dimensions.height - margin * 2;
     const timelineTop = margin;
+    const imageMargin = 120; // Extra space beyond timeline for images to overflow
 
     // Y scale
     const yScale = (seconds: number): number => {
@@ -131,81 +145,225 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({ events, onEventClick, o
     ctx.font = '10px "Roboto Condensed", sans-serif';
     ctx.textAlign = 'right';
 
-    // Helper function to format unix seconds as date
+    // Helper function to format tick labels based on the currently displayed unit
     const formatDateLabel = (unixSeconds: number): string => {
-      const date = new Date(unixSeconds * 1000);
+      // Safely create Date, clamping to valid range
+      const MAX_DATE_MS = 8.64e15;
+      const dateMs = Math.max(-MAX_DATE_MS, Math.min(MAX_DATE_MS, unixSeconds * 1000));
 
-      // Determine what level of detail to show based on visible range
-      const daysInRange = visibleRange / 86400;
+      let date: Date | null = null;
+      try {
+        date = new Date(dateMs);
+        if (isNaN(date.getTime())) date = null;
+      } catch {
+        date = null;
+      }
 
-      if (daysInRange < 2) {
-        // Show year-month-day-hour for short ranges
-        return date.toISOString().split('T')[0] + ' ' +
-               date.getUTCHours().toString().padStart(2, '0') + 'h';
-      } else if (daysInRange < 90) {
-        // Show year-month-day for medium ranges
-        return date.toISOString().split('T')[0];
-      } else if (daysInRange < 1100) {
-        // Show year-month for longer ranges
-        const year = date.getUTCFullYear();
-        const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
-        return `${year}-${month}`;
+      if (!date) {
+        // Fallback for out-of-range dates
+        return Math.round(unixSeconds).toString();
+      }
+
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+      // Format based on the currently displayed unit
+      if (unitToDisplay.unit === 'day') {
+        // Show day of month: "01", "02", etc.
+        return date.getUTCDate().toString().padStart(2, '0');
+      } else if (unitToDisplay.unit === 'month') {
+        // Show 3-letter month abbreviation
+        return monthNames[date.getUTCMonth()];
+      } else if (unitToDisplay.unit === 'hour') {
+        // Show hour: "00h", "01h", etc.
+        return date.getUTCHours().toString().padStart(2, '0') + 'h';
+      } else if (unitToDisplay.unit === 'min') {
+        // Show hour:minute
+        return date.getUTCHours().toString().padStart(2, '0') + ':' +
+               date.getUTCMinutes().toString().padStart(2, '0');
+      } else if (unitToDisplay.unit === 'sec') {
+        // Show hour:minute:second
+        return date.getUTCHours().toString().padStart(2, '0') + ':' +
+               date.getUTCMinutes().toString().padStart(2, '0') + ':' +
+               date.getUTCSeconds().toString().padStart(2, '0');
+      } else if (unitToDisplay.unit === 'ms') {
+        // Show milliseconds
+        return date.getUTCMilliseconds().toString().padStart(3, '0');
+      } else if (unitToDisplay.unit === 'μs' || unitToDisplay.unit === 'ns') {
+        // For microseconds and nanoseconds, show full ISO
+        return date.toISOString();
       } else {
-        // Show just year for very long ranges
+        // For year and larger units, show just the year
         return date.getUTCFullYear().toString();
       }
     };
 
-    // Draw multiple scales of ticks - major and minor gridlines
-    TIME_UNITS.forEach((unit, unitIndex) => {
+    // Determine which unit to display based on spacing
+    // Find the largest unit that still has at least 24px spacing between ticks (one text line)
+    const minSpacingForUnit = 24;
+    let unitToDisplay: typeof TIME_UNITS[0] | null = null;
+    let unitIndexToDisplay = -1;
+
+    for (let i = TIME_UNITS.length - 1; i >= 0; i--) {
+      const unit = TIME_UNITS[i];
       const pixelsPerUnit = (unit.seconds / visibleRange) * timelineHeight;
 
-      // Skip if too small to display
-      if (pixelsPerUnit < 3) return;
-
-      const startUnit = Math.floor(centerSeconds / unit.seconds) - 10;
-      const endUnit = startUnit + Math.ceil((visibleRange / unit.seconds) * 2);
-
-      // Determine tick size and opacity based on hierarchy
-      let tickLength = 4;
-      let lineWidth = 0.5;
-      let opacity = 0.3;
-      let shouldLabel = false;
-
-      // Make every 4th or 5th unit a major tick with labels
-      // Find the next larger unit to determine when to label
-      let labelInterval = 1;
-      if (unitIndex < TIME_UNITS.length - 1) {
-        const nextUnitRatio = TIME_UNITS[unitIndex + 1].seconds / unit.seconds;
-        labelInterval = Math.ceil(nextUnitRatio);
+      if (pixelsPerUnit >= minSpacingForUnit) {
+        unitToDisplay = unit;
+        unitIndexToDisplay = i;
+        break;
       }
+    }
 
+    // If no unit fits minimum spacing, use the largest unit
+    if (!unitToDisplay) {
+      unitToDisplay = TIME_UNITS[0];
+      unitIndexToDisplay = 0;
+    }
+
+    // Draw ticks for the selected unit
+    const pixelsPerUnit = (unitToDisplay.seconds / visibleRange) * timelineHeight;
+
+    // Calculate range to cover entire visible area plus some margin
+    const topSeconds = END_TIME - (Math.abs(transform.y) / timelineHeight) * visibleRange + timelineHeight * visibleRange / timelineHeight;
+    const bottomSeconds = END_TIME - (Math.abs(transform.y) + timelineHeight) / timelineHeight * visibleRange - timelineHeight * visibleRange / timelineHeight;
+
+    const startUnit = Math.floor(bottomSeconds / unitToDisplay.seconds);
+    const endUnit = Math.ceil(topSeconds / unitToDisplay.seconds);
+
+    // Only render ticks if they're actually visible with minimum spacing
+    if (pixelsPerUnit > 4) {
       for (let i = startUnit; i <= endUnit; i++) {
-        const seconds = i * unit.seconds;
+        const seconds = i * unitToDisplay.seconds;
         const y = yScale(seconds);
 
-        if (y >= timelineTop && y <= timelineTop + timelineHeight) {
-          const isMajor = i % labelInterval === 0;
+        // Skip if outside viewport
+        if (y < timelineTop - 50 || y > timelineTop + timelineHeight + 50) continue;
 
-          // Draw tick
-          ctx.strokeStyle = `rgba(209, 213, 219, ${isMajor ? 0.8 : opacity})`;
-          ctx.lineWidth = isMajor ? 1 : lineWidth;
-          ctx.globalAlpha = isMajor ? 1 : opacity;
-          ctx.beginPath();
-          ctx.moveTo(timelineX - (isMajor ? 10 : tickLength), y);
-          ctx.lineTo(timelineX + (isMajor ? 2 : tickLength), y);
-          ctx.stroke();
-          ctx.globalAlpha = 1;
+        // Draw tick
+        ctx.strokeStyle = 'rgba(209, 213, 219, 0.8)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(timelineX - 10, y);
+        ctx.lineTo(timelineX + 2, y);
+        ctx.stroke();
 
-          // Draw label only for major ticks
-          if (isMajor && pixelsPerUnit > 25) {
-            ctx.fillStyle = '#9ca3af';
-            const label = formatDateLabel(seconds);
-            ctx.fillText(label, timelineX - 12, y + 4);
-          }
+        // Draw label only if spacing is sufficient
+        if (pixelsPerUnit > 24) {
+          ctx.fillStyle = '#9ca3af';
+          const label = formatDateLabel(seconds);
+          ctx.fillText(label, timelineX - 12, y + 4);
         }
       }
-    });
+    }
+
+    // Draw larger unit label at extremities (top and bottom only, no ticks)
+    if (unitIndexToDisplay > 0) {
+      const largerUnitIndex = unitIndexToDisplay - 1;
+      const largerUnit = TIME_UNITS[largerUnitIndex];
+
+      // Only show larger units if they're significantly larger
+      if (largerUnit.seconds > unitToDisplay.seconds * 2) {
+        // Reverse colors: white text on dark background
+        ctx.fillStyle = '#1f2937';
+        ctx.font = 'bold 28px "Roboto Condensed", sans-serif';
+        ctx.textAlign = 'right';
+
+        // Get the visible time range at the extremities
+        const visibleTopTime = END_TIME - (Math.abs(transform.y) / timelineHeight) * visibleRange;
+        const visibleBottomTime = END_TIME - (Math.abs(transform.y) + timelineHeight) / timelineHeight * visibleRange;
+
+        // Format the larger unit appropriately
+        // Safely create Date objects - clamp to valid range for JavaScript Date
+        const MAX_DATE_MS = 8.64e15; // Max valid milliseconds for Date
+        const topDateMs = Math.max(-MAX_DATE_MS, Math.min(MAX_DATE_MS, visibleTopTime * 1000));
+        const bottomDateMs = Math.max(-MAX_DATE_MS, Math.min(MAX_DATE_MS, visibleBottomTime * 1000));
+
+        let topDate: Date | null = null;
+        let bottomDate: Date | null = null;
+
+        try {
+          topDate = new Date(topDateMs);
+          if (isNaN(topDate.getTime())) topDate = null;
+        } catch {
+          topDate = null;
+        }
+
+        try {
+          bottomDate = new Date(bottomDateMs);
+          if (isNaN(bottomDate.getTime())) bottomDate = null;
+        } catch {
+          bottomDate = null;
+        }
+
+        let topLabel: string;
+        let bottomLabel: string;
+
+        // Format based on the larger unit type
+        if (topDate && bottomDate) {
+          if (largerUnit.unit === 'year' || largerUnit.unit === 'years') {
+            topLabel = topDate.getUTCFullYear().toString();
+            bottomLabel = bottomDate.getUTCFullYear().toString();
+          } else if (largerUnit.unit === 'month') {
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            const topMonth = monthNames[topDate.getUTCMonth()];
+            const topYear = topDate.getUTCFullYear();
+            topLabel = `${topYear} ${topMonth}`;
+            const bottomMonth = monthNames[bottomDate.getUTCMonth()];
+            const bottomYear = bottomDate.getUTCFullYear();
+            bottomLabel = `${bottomYear} ${bottomMonth}`;
+          } else if (largerUnit.unit === 'day') {
+            topLabel = topDate.toISOString().split('T')[0];
+            bottomLabel = bottomDate.toISOString().split('T')[0];
+          } else if (largerUnit.unit === 'hour') {
+            topLabel = topDate.toISOString().split('T')[0] + ' ' +
+                      topDate.getUTCHours().toString().padStart(2, '0') + 'h';
+            bottomLabel = bottomDate.toISOString().split('T')[0] + ' ' +
+                         bottomDate.getUTCHours().toString().padStart(2, '0') + 'h';
+          } else if (largerUnit.unit === 'min') {
+            topLabel = topDate.toISOString().split('T')[0] + ' ' +
+                      topDate.getUTCHours().toString().padStart(2, '0') + ':' +
+                      topDate.getUTCMinutes().toString().padStart(2, '0');
+            bottomLabel = bottomDate.toISOString().split('T')[0] + ' ' +
+                         bottomDate.getUTCHours().toString().padStart(2, '0') + ':' +
+                         bottomDate.getUTCMinutes().toString().padStart(2, '0');
+          } else if (largerUnit.unit === 'sec') {
+            topLabel = topDate.toISOString().split('Z')[0];
+            bottomLabel = bottomDate.toISOString().split('Z')[0];
+          } else {
+            // For ms, μs, ns - show full timestamp
+            topLabel = topDate.toISOString();
+            bottomLabel = bottomDate.toISOString();
+          }
+        } else {
+          // Fallback for out-of-range dates - show numeric time
+          topLabel = visibleTopTime.toFixed(0);
+          bottomLabel = visibleBottomTime.toFixed(0);
+        }
+
+        // Show larger unit label ONLY at absolute top with background
+        ctx.fillStyle = '#e5e7eb';
+        ctx.globalAlpha = 0.7;
+        ctx.fillRect(timelineX - 140, timelineTop + 2, 130, 24);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#111827';
+        ctx.textAlign = 'left';
+        ctx.fillText(topLabel, timelineX - 135, timelineTop + 20);
+        ctx.textAlign = 'center';
+
+        // Show larger unit label ONLY at absolute bottom with background
+        ctx.fillStyle = '#e5e7eb';
+        ctx.globalAlpha = 0.7;
+        ctx.fillRect(timelineX - 140, timelineTop + timelineHeight - 26, 130, 24);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#111827';
+        ctx.textAlign = 'left';
+        ctx.fillText(bottomLabel, timelineX - 135, timelineTop + timelineHeight - 8);
+        ctx.textAlign = 'center';
+      }
+    }
+
+    // Track image positions for collision detection
+    const renderedImageBounds: Array<{ y: number; height: number }> = [];
 
     // Draw event markers (semantic zoom - circles stay same size)
     events.forEach((event) => {
@@ -278,7 +436,111 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({ events, onEventClick, o
       }
     });
 
-  }, [dimensions, events, transform]);
+    // Draw event images on canvas with zoom support
+    events.forEach((event) => {
+      const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
+      const y = yScale(unixSeconds);
+
+      if (y >= timelineTop && y <= timelineTop + timelineHeight) {
+        const imageUrl = getEventImageUrl(event);
+
+        if (imageUrl) {
+          // Try to get cached image or load it
+          let img = imageCache.current.get(imageUrl);
+
+          if (!img) {
+            // Load image asynchronously and cache it
+            const newImg = new Image();
+            newImg.crossOrigin = 'anonymous';
+            newImg.onload = () => {
+              imageCache.current.set(imageUrl, newImg);
+              // Trigger re-render when image loads
+              setImagesLoaded(prev => prev + 1);
+            };
+            newImg.onerror = () => {
+              console.warn(`Failed to load image: ${imageUrl}`);
+            };
+            newImg.src = imageUrl;
+          } else {
+            // Image is loaded, render it
+            const baseImageSize = 40; // Base image size at zoom 1.0
+            const scaledSize = baseImageSize * transform.k; // Grow with zoom level
+            const MIN_DISPLAY_SIZE = 24; // Hide if smaller than 24x24
+            const MAX_DISPLAY_SIZE = 100; // Cap at 100px maximum
+
+            // Only render if large enough
+            if (scaledSize >= MIN_DISPLAY_SIZE) {
+              const displaySize = Math.min(scaledSize, MAX_DISPLAY_SIZE);
+              const imgX = timelineX + 15; // Offset from event circle (circle radius 5 + padding)
+              const imgY = y - displaySize / 2; // Center vertically on event
+
+              // Check collision with other images first
+              let collides = false;
+              for (const bounds of renderedImageBounds) {
+                if (imgY < bounds.y + bounds.height && imgY + displaySize > bounds.y) {
+                  collides = true;
+                  break;
+                }
+              }
+
+              if (!collides) {
+                // Check if image will be clipped by canvas edge, and shift position if needed
+                let finalImgY = imgY;
+                const canvasBottom = dimensions.height;
+                const canvasTop = 0;
+                const imageMargin = 30; // Margin from canvas edges
+
+                // If image extends beyond canvas bottom, shift it up
+                if (finalImgY + displaySize > canvasBottom - imageMargin) {
+                  finalImgY = canvasBottom - displaySize - imageMargin;
+                }
+                // If image extends beyond canvas top, shift it down
+                if (finalImgY < canvasTop + imageMargin) {
+                  finalImgY = canvasTop + imageMargin;
+                }
+
+                // Re-check collisions with shifted position
+                collides = false;
+                for (const bounds of renderedImageBounds) {
+                  if (finalImgY < bounds.y + bounds.height && finalImgY + displaySize > bounds.y) {
+                    collides = true;
+                    break;
+                  }
+                }
+
+                if (!collides) {
+                  // Draw image with padding
+                  const padding = 2;
+                  const drawX = imgX + padding;
+                  const drawY = finalImgY + padding;
+                  const drawWidth = displaySize - padding * 2;
+                  const drawHeight = displaySize - padding * 2;
+
+                  // Draw background rectangle
+                  ctx.fillStyle = '#1f2937';
+                  ctx.fillRect(imgX, finalImgY, displaySize, displaySize);
+                  ctx.strokeStyle = '#374151';
+                  ctx.lineWidth = 1;
+                  ctx.strokeRect(imgX, finalImgY, displaySize, displaySize);
+
+                  // Draw image
+                  try {
+                    ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
+                  } catch (e) {
+                    // Image not ready yet, will be drawn next frame
+                  }
+
+                  // Track this image's bounds for collision detection
+                  renderedImageBounds.push({ y: finalImgY, height: displaySize });
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+  }, [dimensions, events, transform, imagesLoaded]);
 
   // Handle zoom/pan with mouse position-based zoom
   useEffect(() => {
@@ -294,12 +556,13 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({ events, onEventClick, o
 
       // Calculate zoom factor (less aggressive)
       const delta = e.deltaY > 0 ? 1.05 : 0.95;
-      // Allow zooming much deeper - up to 100,000,000,000,000x for nanosecond precision
-      const newK = Math.max(1, Math.min(100000000000000, transform.k * delta));
+      // Allow zooming much deeper - up to 1,000,000,000,000,000,000x (1 billion trillion) for picosecond precision
+      const newK = Math.max(1, Math.min(1e18, transform.k * delta));
 
       // Zoom towards mouse position
       // Calculate the world position at mouse Y before zoom
-      const timelineHeight = dimensions.height - 40;
+      const margin = 20;
+      const timelineHeight = dimensions.height - margin * 2;
       const oldWorldY = (transform.y - mouseY) / transform.k;
 
       // Apply new zoom
