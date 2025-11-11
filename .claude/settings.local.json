@@ -25,7 +25,10 @@
       "Bash(/usr/bin/curl -s 'http://localhost:8080/api/events?limit=2')",
       "Bash(/usr/bin/curl -s 'http://localhost:8080/api/events?limit=3')",
       "Bash(/usr/bin/curl:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(make build:*)",
+      "Bash(kill:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

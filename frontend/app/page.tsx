@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import TimelineCanvas from '@/components/TimelineCanvas';
 import EventPanel from '@/components/EventPanel';
+import EventDetailModal, { type EventDetailModalHandle } from '@/components/EventDetailModal';
 import { EventResponse } from '@/types';
 import { eventsApi } from '@/lib/api';
 
@@ -11,19 +12,29 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedEvent, setSelectedEvent] = useState<EventResponse | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [transform, setTransform] = useState({ y: 0, k: 1 });
   const [visibleEvents, setVisibleEvents] = useState<EventResponse[]>([]);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const modalRef = useRef<EventDetailModalHandle>(null);
 
-  // Load transform from URL on mount
+  // Load transform from URL on mount or set initial state with Big Bang at middle of screen
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const y = parseFloat(params.get('y') || '0');
-    const k = parseFloat(params.get('k') || '1');
-    if (!isNaN(y) || !isNaN(k)) {
+    const y = parseFloat(params.get('y') || '');
+    const k = parseFloat(params.get('k') || '');
+
+    if (!isNaN(y) && !isNaN(k)) {
       // Clamp zoom to reasonable range to prevent performance issues
-      const clampedK = Math.max(1, Math.min(1e18, !isNaN(k) ? k : 1));
-      setTransform({ y: !isNaN(y) ? y : 0, k: clampedK });
+      const clampedK = Math.max(1, Math.min(1e18, k));
+      setTransform({ y, k: clampedK });
+    } else {
+      // Default: Big Bang at middle of screen
+      // Big Bang Y = window.innerHeight * k + y
+      // We want Big Bang at middle: window.innerHeight / 2
+      // So: window.innerHeight * 1 + y = window.innerHeight / 2
+      // y = window.innerHeight / 2 - window.innerHeight = -window.innerHeight / 2
+      setTransform({ y: -window.innerHeight / 2, k: 1 });
     }
   }, []);
 
@@ -50,6 +61,23 @@ export default function Home() {
 
   const handleEventClick = (event: EventResponse) => {
     setSelectedEvent(event);
+    setModalOpen(true);
+  };
+
+  const handleEventUpdate = (updatedEvent: EventResponse) => {
+    // Update the events list with the updated event
+    setEvents((prevEvents) =>
+      prevEvents.map((e) => (e.id === updatedEvent.id ? updatedEvent : e))
+    );
+    // Update the selected event to reflect changes
+    setSelectedEvent(updatedEvent);
+  };
+
+  const handleTimelineClickForModal = (unixSeconds: number) => {
+    // This will be called from the TimelineCanvas when modal is open
+    // We need to pass this to the modal somehow
+    // For now, we'll log it to show the concept
+    console.log('Timeline clicked at unix_seconds:', unixSeconds);
   };
 
   // Handle timeline transform - just update transform and URL, don't update selection
@@ -71,9 +99,10 @@ export default function Home() {
   };
 
   // Auto-select closest event to viewport center from visible events
+  // Only update when visible events change, not on every transform change to avoid loops
   useEffect(() => {
     if (visibleEvents.length > 0) {
-      const margin = 20;
+      const margin = 0; // No margin - timeline spans full height
       const timelineHeight = window.innerHeight - margin * 2;
       const timelineTop = margin;
       const centerViewportY = timelineTop + timelineHeight / 2;
@@ -99,7 +128,7 @@ export default function Home() {
         setSelectedEvent(closestEvent);
       }
     }
-  }, [visibleEvents, transform]);
+  }, [visibleEvents]);
 
   if (loading) {
     return (
@@ -129,17 +158,36 @@ export default function Home() {
     );
   }
 
+  const handleCanvasClick = (unixSeconds: number) => {
+    // When modal is open, update the unix_seconds in the modal
+    console.log('handleCanvasClick called:', { unixSeconds, modalOpen, hasRef: !!modalRef.current });
+    if (modalOpen && modalRef.current) {
+      console.log('Updating unix_seconds to:', unixSeconds);
+      modalRef.current.updateUnixSeconds(unixSeconds);
+    }
+  };
+
   return (
-    <main className="flex h-screen w-screen bg-gray-900 text-white" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
-      {/* Canvas Timeline - Left 15% (narrower) */}
-      <div className="w-[15%] h-full border-r border-gray-700">
-        <TimelineCanvas events={events} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onVisibleEventsChange={setVisibleEvents} initialTransform={transform} />
+    <main className="relative h-screen w-screen bg-gray-900 text-white flex" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
+      {/* Canvas Timeline - 300px fixed width */}
+      <div className="h-full flex-shrink-0" style={{ width: '300px' }}>
+        <TimelineCanvas events={events} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onVisibleEventsChange={setVisibleEvents} initialTransform={transform} onCanvasClick={handleCanvasClick} modalOpen={modalOpen} />
       </div>
 
-      {/* Event Panel - Right 85% */}
-      <div className="w-[85%] h-full overflow-y-auto">
-        <EventPanel selectedEvent={selectedEvent} events={events} visibleEvents={visibleEvents} transform={transform} />
+      {/* Event Panel - Remaining width */}
+      <div className="flex-1 h-full">
+        <EventPanel selectedEvent={selectedEvent} events={events} visibleEvents={visibleEvents} transform={transform} onEventClick={handleEventClick} />
       </div>
+
+      {/* Event Detail Modal */}
+      <EventDetailModal
+        ref={modalRef}
+        event={selectedEvent}
+        events={events}
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onEventUpdate={handleEventUpdate}
+      />
     </main>
   );
 }

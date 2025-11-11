@@ -24,6 +24,9 @@ type Event struct {
 
 	ImportanceScore int `json:"importance_score" db:"importance_score"`
 
+	// Relationships
+	RelatedEventID *string `json:"related_event_id,omitempty" db:"related_event_id"`
+
 	// Metadata
 	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at" db:"updated_at"`

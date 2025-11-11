@@ -27,7 +27,7 @@ func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) 
 			title, description, category, created_by_user_id
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
-		          title, description, category, importance_score,
+		          title, description, category, importance_score, related_event_id,
 		          created_at, updated_at, created_by_user_id
 	`
 
@@ -53,6 +53,7 @@ func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) 
 		&event.Description,
 		&event.Category,
 		&event.ImportanceScore,
+		&event.RelatedEventID,
 		&event.CreatedAt,
 		&event.UpdatedAt,
 		&event.CreatedByUserID,
@@ -69,7 +70,7 @@ func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) 
 func (r *EventRepository) GetByID(id string) (*models.Event, error) {
 	query := `
 		SELECT id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
-		       title, description, category, importance_score,
+		       title, description, category, importance_score, related_event_id,
 		       created_at, updated_at, created_by_user_id
 		FROM events
 		WHERE id = $1
@@ -87,6 +88,7 @@ func (r *EventRepository) GetByID(id string) (*models.Event, error) {
 		&event.Description,
 		&event.Category,
 		&event.ImportanceScore,
+		&event.RelatedEventID,
 		&event.CreatedAt,
 		&event.UpdatedAt,
 		&event.CreatedByUserID,
@@ -107,7 +109,7 @@ func (r *EventRepository) List(params models.EventQueryParams) ([]models.Event, 
 	// Build query
 	query := `
 		SELECT id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
-		       title, description, category, importance_score,
+		       title, description, category, importance_score, related_event_id,
 		       created_at, updated_at, created_by_user_id
 		FROM public.events
 		WHERE 1=1
@@ -188,6 +190,7 @@ func (r *EventRepository) List(params models.EventQueryParams) ([]models.Event, 
 			&event.Description,
 			&event.Category,
 			&event.ImportanceScore,
+			&event.RelatedEventID,
 			&event.CreatedAt,
 			&event.UpdatedAt,
 			&event.CreatedByUserID,
@@ -262,7 +265,7 @@ func (r *EventRepository) Update(id string, req models.UpdateEventRequest) (*mod
 		SET %s
 		WHERE id = $%d
 		RETURNING id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
-		          title, description, category, importance_score,
+		          title, description, category, importance_score, related_event_id,
 		          created_at, updated_at, created_by_user_id
 	`, strings.Join(updates, ", "), argCount)
 
@@ -278,6 +281,7 @@ func (r *EventRepository) Update(id string, req models.UpdateEventRequest) (*mod
 		&event.Description,
 		&event.Category,
 		&event.ImportanceScore,
+		&event.RelatedEventID,
 		&event.CreatedAt,
 		&event.UpdatedAt,
 		&event.CreatedByUserID,

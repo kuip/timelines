@@ -16,12 +16,15 @@ export type PrecisionLevel =
 export interface Event {
   id: string;
   timeline_seconds: string; // Decimal string from backend
+  unix_seconds?: number; // Unix epoch seconds
+  unix_nanos?: number; // Nanosecond component
   precision_level: PrecisionLevel;
   uncertainty_range?: string;
   title: string;
   description?: string;
   category?: string;
   importance_score: number;
+  related_event_id?: string; // Links to another event with an arc
   created_at: string;
   updated_at: string;
   created_by_user_id?: string;

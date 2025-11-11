@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { EventResponse } from '@/types';
-import ReactMarkdown from 'react-markdown';
+import { calculateEventY, getDisplayableEvents } from '@/lib/coordinateHelper';
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   cosmic: { bg: '#8b5cf6', text: '#f5e6ff' },
@@ -19,21 +19,16 @@ interface EventPanelProps {
   events: EventResponse[];
   visibleEvents: EventResponse[];
   transform?: { y: number; k: number };
+  onEventClick?: (event: EventResponse) => void;
 }
 
-const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleEvents, transform = { y: 0, k: 1 } }) => {
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [showDescription, setShowDescription] = useState(false);
+const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleEvents, transform = { y: 0, k: 1 }, onEventClick }) => {
   const [dimensions, setDimensions] = useState({ height: 0 });
+  const [currentTime, setCurrentTime] = useState(Date.now() / 1000); // Current time in Unix seconds
   const contentRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Track panel height for coordinate calculations
+  // Track panel height for coordinate calculations (full panel height)
   useEffect(() => {
     const updateDimensions = () => {
       if (panelRef.current) {
@@ -48,85 +43,90 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
     return () => window.removeEventListener('resize', updateDimensions);
   }, []);
 
-  // Calculate if we have room to show description
+  // Update current time every 100ms for smooth updates
   useEffect(() => {
-    if (!contentRef.current || !selectedEvent) {
-      setShowDescription(false);
-      return;
-    }
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now() / 1000);
+    }, 100);
 
-    // Approximate line height in pixels
-    const lineHeight = 24;
-    const availableHeight = contentRef.current.clientHeight;
+    return () => clearInterval(interval);
+  }, []);
 
-    // Estimate: title (1-2 lines) + timeline box (4 lines) + min content
-    // If remaining space > 2 lines, show description
-    const minimumHeightForDescription = lineHeight * 8;
 
-    setShowDescription(availableHeight > minimumHeightForDescription);
-  }, [selectedEvent]);
 
-  const formatTime = (date: Date) => {
-    return date.toISOString().split('T')[0] + ' ' + date.toISOString().split('T')[1].slice(0, 8) + ' GMT';
-  };
-
-  // Helper function to calculate Y position for an event based on transform
-  // This matches the canvas coordinate system EXACTLY, but positioned within content area
+  // Use shared coordinate helper for Y positioning
   const getEventY = (unixSeconds: number): number => {
-    const START_TIME = -435494878264400000;
-    const END_TIME = 435457000000000000;
-    const margin = 20;
-    const timelineHeight = dimensions.height - margin * 2; // MUST match TimelineCanvas
-    const timelineTop = margin;
-
-    const numSeconds = typeof unixSeconds === 'number' ? unixSeconds : parseInt(unixSeconds as any);
-    // Calculate in canvas coordinate space (with margin offset from top)
-    const canvasY = timelineTop + ((END_TIME - numSeconds) / (END_TIME - START_TIME)) * timelineHeight * transform.k + transform.y;
-
-    // Convert to content-area-relative coordinates
-    // The canvas starts at timelineTop (margin=20), so we subtract that to get position within content area
-    return canvasY - timelineTop;
+    const margin = 0; // No margin - timeline spans full height
+    const timelineHeight = dimensions.height - margin * 2;
+    return calculateEventY(unixSeconds, timelineHeight, transform);
   };
+
+  // Create a "Now" event for display
+  // Always use real time (Date.now()) not the state currentTime which may be stale
+  const realNowSeconds = Date.now() / 1000;
+  const getFormattedNowTime = () => {
+    const now = new Date(realNowSeconds * 1000); // Convert Unix seconds to milliseconds
+    const century = Math.floor(now.getUTCFullYear() / 100) * 100;
+    const year = now.getUTCFullYear();
+    const month = (now.getUTCMonth() + 1).toString().padStart(2, '0');
+    const date = now.getUTCDate().toString().padStart(2, '0');
+    const hours = now.getUTCHours().toString().padStart(2, '0');
+    const minutes = now.getUTCMinutes().toString().padStart(2, '0');
+    const seconds = now.getUTCSeconds().toString().padStart(2, '0');
+    const milliseconds = Math.floor((realNowSeconds % 1) * 1000).toString().padStart(3, '0');
+    const microseconds = Math.floor((realNowSeconds % 1) * 1000000 % 1000).toString().padStart(3, '0');
+    const nanoseconds = Math.floor((realNowSeconds % 1) * 1000000000 % 1000).toString().padStart(3, '0');
+
+    return `${century}s | ${year} | ${month}/${date} | ${hours}:${minutes}:${seconds} | ${milliseconds}ms ${microseconds}μs ${nanoseconds}ns`;
+  };
+
+  const nowEvent = {
+    id: 'now',
+    title: 'Now',
+    unix_seconds: realNowSeconds,
+    formatted_time: getFormattedNowTime(),
+    category: 'contemporary' as const,
+  } as unknown as EventResponse;
 
   // Determine which visible events can be displayed with their titles (collision detection)
-  const getDisplayableEvents = (): EventResponse[] => {
-    if (visibleEvents.length <= 1) return [];
+  // Use the shared collision detection function for consistency with canvas images
+  const displayableEvents = (() => {
+    const START_TIME = -435494878264400000;
+    const now = Math.floor(Date.now() / 1000);
+    const FUTURE_HORIZON_TIME = now + (200 * 31536000); // Now + 200 years
 
-    const minSpacing = 32; // Minimum pixels between title labels
-    const positions = visibleEvents.map((event) => ({
-      event,
-      y: getEventY(event.unix_seconds),
-    })).sort((a, b) => a.y - b.y);
+    // Filter visible events to exclude those beyond Future Horizon
+    const filteredVisibleEvents = visibleEvents.filter((event) => {
+      const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
+      return unixSeconds >= START_TIME && unixSeconds <= FUTURE_HORIZON_TIME;
+    });
 
-    const displayable: EventResponse[] = [];
-    let lastY = -Infinity;
+    const allVisibleEvents = [...filteredVisibleEvents];
 
-    for (const { event, y } of positions) {
-      if (y - lastY >= minSpacing) {
-        displayable.push(event);
-        lastY = y;
-      }
+    // Add Now event if it's within view
+    const nowY = getEventY(currentTime);
+    if (nowY >= 0 && nowY <= dimensions.height) {
+      allVisibleEvents.push(nowEvent);
     }
 
-    return displayable;
-  };
+    if (allVisibleEvents.length === 0) return [];
 
-  const displayableEvents = getDisplayableEvents();
+    const positions = allVisibleEvents.map((event) => ({
+      event,
+      y: getEventY(event.unix_seconds || 0),
+    })).sort((a, b) => a.y - b.y);
+
+    const displayableIds = getDisplayableEvents(positions, dimensions.height);
+    return positions.filter(({ event }) => displayableIds.has(event.id)).map(({ event }) => event);
+  })();
 
   return (
     <div ref={panelRef} className="h-full bg-gray-900 text-gray-100 flex flex-col relative" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
-      {/* Header */}
-      <div className="flex-shrink-0 px-6 py-4 border-b border-gray-700 bg-gray-800">
-        <div className="text-sm text-gray-400 font-bold">
-          Now: {formatTime(currentTime)}
-        </div>
-      </div>
-
       {/* Content - Synchronized visible events with vertical alignment */}
-      <div ref={contentRef} className="flex-1 relative overflow-y-auto px-6">
-        {visibleEvents.length > 0 ? (
+      <div ref={contentRef} className="h-full relative">
+        {displayableEvents.length > 0 ? (
           <div className="relative" style={{ height: '100%' }}>
-            {visibleEvents
+            {displayableEvents
               .map((event) => {
                 const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
                 const eventY = getEventY(unixSeconds);
@@ -151,6 +151,18 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                   return null;
                 }
 
+              // Use the same max size as canvas images (100px) for perfect alignment
+              const cardHeight = 100;
+
+              // Special rendering for "Now" event - show time in MM:SS format as image
+              const isNowEvent = event.id === 'now';
+              const timeDisplay = isNowEvent ? (() => {
+                const now = new Date();
+                const minutes = now.getUTCMinutes().toString().padStart(2, '0');
+                const seconds = now.getUTCSeconds().toString().padStart(2, '0');
+                return `${minutes}:${seconds}`;
+              })() : null;
+
               return (
                 <div
                   key={event.id}
@@ -159,34 +171,61 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                     top: `${eventY}px`,
                     left: 0,
                     right: 0,
+                    height: `${cardHeight}px`,
                     transform: 'translateY(-50%)',
                   }}
                   className="w-full"
                 >
-                  <div className="p-3 bg-gray-800 rounded border border-gray-700 hover:border-blue-500 cursor-pointer transition">
-                    {/* Event Title */}
-                    <h3 className="text-sm font-bold text-white mb-1">
-                      {event.title}
-                    </h3>
+                  {isNowEvent ? (
+                    // Special card for "Now" event
+                    <div className="p-3 bg-gray-900 rounded border-2 border-gray-300 cursor-pointer transition overflow-hidden flex flex-col" style={{ height: '100%' }}>
+                      {/* Event Title */}
+                      <h3 className="text-base font-bold text-gray-100 mb-2 flex-shrink-0">
+                        {event.title}
+                      </h3>
 
-                    {/* Event Time */}
-                    <div className="text-xs text-blue-400 font-bold mb-2">
-                      {event.formatted_time}
+                      {/* Event Time - All resolutions */}
+                      <div className="text-sm text-gray-200 font-mono font-semibold flex-shrink-0 overflow-hidden">
+                        {event.formatted_time}
+                      </div>
                     </div>
+                  ) : (
+                    // Regular event card
+                    <div
+                      onClick={() => onEventClick?.(event)}
+                      className="p-3 bg-gray-800 rounded border border-gray-700 hover:border-blue-500 cursor-pointer transition overflow-hidden flex flex-col" style={{ height: '100%' }}
+                    >
+                      {/* Event Title */}
+                      <h3 className="text-sm font-bold text-white mb-1 flex-shrink-0">
+                        {event.title}
+                      </h3>
 
-                    {/* Category */}
-                    {event.category && (
-                      <span
-                        className="inline-block px-1 py-0.5 text-xs font-bold rounded"
-                        style={{
-                          backgroundColor: CATEGORY_COLORS[event.category]?.bg || '#3b82f6',
-                          color: CATEGORY_COLORS[event.category]?.text || '#eff6ff'
-                        }}
-                      >
-                        {event.category.toUpperCase()}
-                      </span>
-                    )}
-                  </div>
+                      {/* Event Time */}
+                      <div className="text-xs text-blue-400 font-bold mb-2 flex-shrink-0">
+                        {event.formatted_time}
+                      </div>
+
+                      {/* Category */}
+                      {event.category && (
+                        <span
+                          className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0"
+                          style={{
+                            backgroundColor: CATEGORY_COLORS[event.category]?.bg || '#3b82f6',
+                            color: CATEGORY_COLORS[event.category]?.text || '#eff6ff'
+                          }}
+                        >
+                          {event.category.toUpperCase()}
+                        </span>
+                      )}
+
+                      {/* Event Description */}
+                      {event.description && (
+                        <p className="text-xs text-gray-300 mt-2 flex-1 overflow-hidden line-clamp-3">
+                          {event.description}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -203,12 +242,6 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
         )}
       </div>
 
-      {/* Footer */}
-      <div className="flex-shrink-0 px-6 py-4 border-t border-gray-700 bg-gray-800">
-        <div className="text-xs text-gray-500">
-          Big Bang
-        </div>
-      </div>
     </div>
   );
 };
