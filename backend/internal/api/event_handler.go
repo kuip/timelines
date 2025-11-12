@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -12,11 +13,12 @@ import (
 // EventHandler handles event-related HTTP requests
 type EventHandler struct {
 	repo *db.EventRepository
+	db   *db.DB
 }
 
 // NewEventHandler creates a new event handler
-func NewEventHandler(repo *db.EventRepository) *EventHandler {
-	return &EventHandler{repo: repo}
+func NewEventHandler(repo *db.EventRepository, database *db.DB) *EventHandler {
+	return &EventHandler{repo: repo, db: database}
 }
 
 // CreateEvent handles POST /api/events
@@ -172,4 +174,66 @@ func (h *EventHandler) GetZoomPresets(c *gin.Context) {
 		"presets": presets,
 		"count":   len(presets),
 	})
+}
+
+// GetEventRelationships handles GET /api/events/:id/relationships
+func (h *EventHandler) GetEventRelationships(c *gin.Context) {
+	eventID := c.Param("id")
+
+	query := `
+	SELECT
+		id, event_id_a, event_id_b, relationship_type, weight, relationship_description
+	FROM event_relationships
+	WHERE event_id_a = $1 OR event_id_b = $1
+	ORDER BY weight DESC
+	`
+
+	rows, err := h.db.Query(query, eventID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to query relationships"})
+		return
+	}
+	defer rows.Close()
+
+	type Relationship struct {
+		ID                  string `json:"id"`
+		EventIDA            string `json:"event_id_a"`
+		EventIDB            string `json:"event_id_b"`
+		RelationshipType    string `json:"relationship_type"`
+		Weight              int    `json:"weight"`
+		RelationshipDesc    string `json:"description,omitempty"`
+	}
+
+	relationships := []Relationship{}
+
+	for rows.Next() {
+		var (
+			id   string
+			a    string
+			b    string
+			rel  string
+			w    int
+			desc sql.NullString
+		)
+
+		if err := rows.Scan(&id, &a, &b, &rel, &w, &desc); err != nil {
+			continue
+		}
+
+		r := Relationship{
+			ID:               id,
+			EventIDA:         a,
+			EventIDB:         b,
+			RelationshipType: rel,
+			Weight:           w,
+		}
+
+		if desc.Valid {
+			r.RelationshipDesc = desc.String
+		}
+
+		relationships = append(relationships, r)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"relationships": relationships})
 }

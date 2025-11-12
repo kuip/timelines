@@ -70,7 +70,8 @@ export const createWheelHandler = (
 
     // Reduce zoom sensitivity by 1.5x (from 1.05/0.95 to 1.033/0.967)
     const delta = e.deltaY > 0 ? 1.033 : 0.967;
-    const newK = Math.max(1, Math.min(1e18, transform.k * delta));
+    // Limit max zoom to 1e9 to prevent floating point precision issues in visible events calculation
+    const newK = Math.max(1, Math.min(1e9, transform.k * delta));
 
     const timelineHeight = dimensions.height;
     const oldWorldY = (transform.y - mouseY) / transform.k;

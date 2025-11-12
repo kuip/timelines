@@ -28,7 +28,12 @@
       "Bash(node:*)",
       "Bash(make build:*)",
       "Bash(kill:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(./backup_database.sh:*)",
+      "Bash(tee:*)",
+      "Bash(timeout 180 python3:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

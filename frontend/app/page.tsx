@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import dynamic from 'next/dynamic';
+import { useEffect, useState, useRef, useCallback, Suspense } from 'react';
 import TimelineCanvas from '@/components/TimelineCanvas';
 import EventPanel from '@/components/EventPanel';
 import EventDetailModal, { type EventDetailModalHandle } from '@/components/EventDetailModal';
@@ -8,6 +9,8 @@ import { EventResponse } from '@/types';
 import { eventsApi } from '@/lib/api';
 import { constrainTransform, type Transform } from '@/lib/canvasInteraction';
 import { getFutureHorizonTime } from '@/lib/coordinateHelper';
+
+const GeoMap = dynamic(() => import('@/components/GeoMap'), { ssr: false });
 
 export default function Home() {
   const [events, setEvents] = useState<EventResponse[]>([]);
@@ -17,6 +20,7 @@ export default function Home() {
   const [modalOpen, setModalOpen] = useState(false);
   const [transform, setTransform] = useState({ y: 0, k: 1 });
   const [visibleEvents, setVisibleEvents] = useState<EventResponse[]>([]);
+  const [displayedCardEvents, setDisplayedCardEvents] = useState<EventResponse[]>([]);
   const [canvasDimensions, setCanvasDimensions] = useState({ width: 200, height: 0 });
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const modalRef = useRef<EventDetailModalHandle>(null);
@@ -217,13 +221,20 @@ export default function Home() {
   return (
     <main className="relative h-screen w-screen bg-gray-900 text-white flex" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
       {/* Canvas Timeline */}
-      <div className="h-full flex-shrink-0" style={{ width: '100px' }}>
-        <TimelineCanvas events={events} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onVisibleEventsChange={setVisibleEvents} initialTransform={transform} transform={transform} onCanvasClick={handleCanvasClick} onShiftClick={handleShiftClick} onDimensionsChange={handleCanvasDimensionsChange} modalOpen={modalOpen} />
+      <div className="h-full flex-shrink-0" style={{ width: '200px' }}>
+        <TimelineCanvas events={events} displayedCardEvents={displayedCardEvents} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onVisibleEventsChange={setVisibleEvents} initialTransform={transform} transform={transform} onCanvasClick={handleCanvasClick} onShiftClick={handleShiftClick} onDimensionsChange={handleCanvasDimensionsChange} modalOpen={modalOpen} />
       </div>
 
-      {/* Event Panel - Remaining width */}
+      {/* Event Panel - Remaining flex space (no relationships panel) */}
       <div className="flex-1 h-full">
-        <EventPanel selectedEvent={selectedEvent} events={events} visibleEvents={visibleEvents} transform={transform} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} />
+        <EventPanel selectedEvent={selectedEvent} events={events} visibleEvents={visibleEvents} transform={transform} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onDisplayedEventsChange={setDisplayedCardEvents} />
+      </div>
+
+      {/* Geolocation Map - Right side full height */}
+      <div className="h-full flex-shrink-0 relative" style={{ width: '45%', zIndex: 1 }}>
+        <Suspense fallback={<div className="w-full h-full flex items-center justify-center bg-gray-800"><p>Loading map...</p></div>}>
+          <GeoMap events={displayedCardEvents} selectedEvent={selectedEvent} />
+        </Suspense>
       </div>
 
       {/* Event Detail Modal */}

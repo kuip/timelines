@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { EventResponse } from '@/types';
 import { calculateEventY, getDisplayableEvents, getFutureHorizonTime } from '@/lib/coordinateHelper';
 import { useZoomThresholds } from '@/lib/useZoomThresholds';
@@ -34,6 +34,7 @@ import {
 
 interface TimelineCanvasProps {
   events: EventResponse[];
+  displayedCardEvents?: EventResponse[];
   onEventClick?: (event: EventResponse) => void;
   onTransformChange?: (transform: Transform) => void;
   onVisibleEventsChange?: (visibleEvents: EventResponse[]) => void;
@@ -45,8 +46,18 @@ interface TimelineCanvasProps {
   transform?: Transform;
 }
 
+interface EventRelationship {
+  id: string;
+  event_id_a: string;
+  event_id_b: string;
+  relationship_type: string;
+  weight: number;
+  description?: string;
+}
+
 const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
   events,
+  displayedCardEvents = [],
   onEventClick,
   onTransformChange,
   onVisibleEventsChange,
@@ -68,6 +79,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
   const [imagesLoaded, setImagesLoaded] = useState(0);
   const [currentTime, setCurrentTime] = useState(Date.now() / 1000);
+  const [relationships, setRelationships] = useState<EventRelationship[]>([]);
 
   const START_TIME = -435494878264400000;
   const END_TIME = 435457000000000000;
@@ -100,12 +112,91 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
     const visibleEvents = events.filter((event) => {
       const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
+
+      // At extreme zoom levels, use time-based visibility instead of Y-coordinate
+      // because floating-point precision breaks down with huge multiplications
+      if (transform.k > 1e6) {
+        // For extreme zoom, calculate the visible time range
+        const visibleTimeSpan = (END_TIME - START_TIME) / transform.k;
+        const topTime = END_TIME - (Math.abs(transform.y) / timelineHeight) * visibleTimeSpan + timelineHeight * visibleTimeSpan / timelineHeight;
+        const bottomTime = END_TIME - (Math.abs(transform.y) + timelineHeight) / timelineHeight * visibleTimeSpan - timelineHeight * visibleTimeSpan / timelineHeight;
+
+        return unixSeconds >= Math.min(topTime, bottomTime) && unixSeconds <= Math.max(topTime, bottomTime);
+      }
+
+      // For normal zoom levels, use the standard Y-coordinate check
       const y = timelineTop + ((END_TIME - unixSeconds) / (END_TIME - START_TIME)) * timelineHeight * transform.k + transform.y;
-      return y >= 0 && y <= dimensions.height;
+      const isVisible = y >= 0 && y <= dimensions.height;
+
+      return isVisible;
+    });
+
+    console.log('TimelineCanvas: Computing visible events', {
+      totalEvents: events.length,
+      visibleCount: visibleEvents.length,
+      timelineHeight,
+      transformK: transform.k,
+      transformY: transform.y,
+      dimensionsHeight: dimensions.height,
     });
 
     onVisibleEventsChange(visibleEvents);
   }, [dimensions, events, transform, onVisibleEventsChange]);
+
+  // Memoize displayed card event IDs to avoid unnecessary fetches
+  const memoizedDisplayedEventIds = useMemo(() => {
+    if (!displayedCardEvents || !Array.isArray(displayedCardEvents) || displayedCardEvents.length === 0) {
+      return [];
+    }
+    return displayedCardEvents.map(e => e.id);
+  }, [displayedCardEvents]);
+
+  // Fetch relationships only for displayed card events with memoization
+  useEffect(() => {
+    const fetchRelationshipsForDisplayedEvents = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
+        // Only fetch relationships for displayed card events
+        if (memoizedDisplayedEventIds.length === 0) {
+          setRelationships([]);
+          return;
+        }
+
+        // Fetch relationships only for displayed events
+        const allRelationships: EventRelationship[] = [];
+        const fetchedRelationshipIds = new Set<string>();
+
+        for (const eventId of memoizedDisplayedEventIds) {
+          try {
+            const response = await fetch(`${apiUrl}/api/events/${eventId}/relationships`);
+            if (!response.ok) continue;
+
+            const data = await response.json();
+            if (data.relationships && Array.isArray(data.relationships)) {
+              for (const rel of data.relationships) {
+                // Use a consistent key to avoid duplicates (A-B and B-A should be treated as same relationship)
+                const key = [rel.event_id_a, rel.event_id_b].sort().join('-');
+                if (!fetchedRelationshipIds.has(key)) {
+                  allRelationships.push(rel);
+                  fetchedRelationshipIds.add(key);
+                }
+              }
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch relationships for event ${eventId}:`, err);
+            continue;
+          }
+        }
+
+        setRelationships(allRelationships);
+      } catch (err) {
+        console.error('Error fetching relationships:', err);
+      }
+    };
+
+    fetchRelationshipsForDisplayedEvents();
+  }, [memoizedDisplayedEventIds]);
 
   // Update dimensions
   useEffect(() => {
@@ -246,7 +337,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     for (const threshold of thresholds) {
       if (transform.k > threshold.k) {
         matchedThreshold = threshold;
-        tickMinSpacing = threshold.minPixelSpacing;
+        tickMinSpacing = threshold.minPixelSpacing; // Update the variable
         break;
       }
     }
@@ -396,32 +487,39 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
       relationshipKey: string;
     }> = [];
 
-    eventPositions.forEach(({ event, y: startY }) => {
-      if (!event.related_event_id) return;
+    // Create a map for quick event lookup
+    const eventMap = new Map(events.map(e => [e.id, e]));
 
-      const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
-      if (unixSeconds < START_TIME || unixSeconds > FUTURE_HORIZON_TIME) return;
+    // Process relationships from the fetched relationships array
+    relationships.forEach((rel) => {
+      // Get both events involved in the relationship
+      const eventA = eventMap.get(rel.event_id_a);
+      const eventB = eventMap.get(rel.event_id_b);
 
-      // Find the related event
-      const relatedEvent = events.find(e => e.id === event.related_event_id);
-      if (!relatedEvent) return;
+      if (!eventA || !eventB) return;
 
-      const relatedUnixSeconds = typeof relatedEvent.unix_seconds === 'number' ? relatedEvent.unix_seconds : parseInt(relatedEvent.unix_seconds as any);
-      if (relatedUnixSeconds < START_TIME || relatedUnixSeconds > FUTURE_HORIZON_TIME) return;
+      const unixSecondsA = typeof eventA.unix_seconds === 'number' ? eventA.unix_seconds : parseInt(eventA.unix_seconds as any);
+      const unixSecondsB = typeof eventB.unix_seconds === 'number' ? eventB.unix_seconds : parseInt(eventB.unix_seconds as any);
 
-      // Only draw each relationship once by using a consistent ordering
-      const relationshipKey = [event.id, event.related_event_id].sort().join('-');
+      if (unixSecondsA < START_TIME || unixSecondsA > FUTURE_HORIZON_TIME) return;
+      if (unixSecondsB < START_TIME || unixSecondsB > FUTURE_HORIZON_TIME) return;
+
+      // Get Y positions
+      const yA = yScale(unixSecondsA);
+      const yB = yScale(unixSecondsB);
+
+      // Only draw each relationship once
+      const relationshipKey = [rel.event_id_a, rel.event_id_b].sort().join('-');
       if (drawnRelationships.has(relationshipKey)) return;
       drawnRelationships.add(relationshipKey);
 
-      const endY = yScale(relatedUnixSeconds);
-      const color = (event.category && CATEGORY_COLORS[event.category]) || '#3b82f6';
-      const timeRangeSeconds = Math.abs(relatedUnixSeconds - unixSeconds);
+      const timeRangeSeconds = Math.abs(unixSecondsB - unixSecondsA);
+      const color = (eventA.category && CATEGORY_COLORS[eventA.category]) || '#3b82f6';
 
       // Always draw from later event (larger unixSeconds) to earlier event
-      const isEventLater = unixSeconds > relatedUnixSeconds;
-      const finalStartY = isEventLater ? startY : endY;
-      const finalEndY = isEventLater ? endY : startY;
+      const isALater = unixSecondsA > unixSecondsB;
+      const finalStartY = isALater ? yA : yB;
+      const finalEndY = isALater ? yB : yA;
 
       // Only show relationship if events are at least 40px apart
       const verticalDistance = Math.abs(finalStartY - finalEndY);
@@ -458,7 +556,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
     // Draw extremity labels last (on top of everything)
     drawExtremityLabels(ctx, topLabel, bottomLabel, dimensions);
-  }, [dimensions, events, transform, imagesLoaded, currentTime, START_TIME, END_TIME]);
+  }, [dimensions, events, transform, imagesLoaded, currentTime, START_TIME, END_TIME, JSON.stringify(relationships)]);
 
   // Handle zoom/pan - use state updater function and query canvas dimensions on demand
   useEffect(() => {
@@ -618,7 +716,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     canvas.addEventListener('mousedown', handleMouseDown);
 
     return () => {
-      canvas.removeEventListener('wheel', handleWheel, { passive: false });
+      canvas.removeEventListener('wheel', handleWheel, { passive: false } as any);
       canvas.removeEventListener('mousedown', handleMouseDown);
     };
   }, [START_TIME, END_TIME, FUTURE_HORIZON_TIME, modalOpen, onCanvasClick, onShiftClick, events]);
