@@ -24,6 +24,7 @@ export default function Home() {
   const [canvasDimensions, setCanvasDimensions] = useState({ width: 200, height: 0 });
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const modalRef = useRef<EventDetailModalHandle>(null);
+  const prevCardIdsRef = useRef<string>('');
 
   // Constants for timeline
   const START_TIME = -435494878264400000;
@@ -190,6 +191,15 @@ export default function Home() {
     setCanvasDimensions(dimensions);
   }, []);
 
+  // Wrapper to prevent unnecessary updates when card IDs haven't changed
+  const handleDisplayedEventsChange = useCallback((newCards: EventResponse[]) => {
+    const newCardIds = newCards.map(c => c.id).join(',');
+    if (newCardIds !== prevCardIdsRef.current) {
+      prevCardIdsRef.current = newCardIds;
+      setDisplayedCardEvents(newCards);
+    }
+  }, []);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -227,13 +237,13 @@ export default function Home() {
 
       {/* Event Panel - Remaining flex space (no relationships panel) */}
       <div className="flex-1 h-full">
-        <EventPanel selectedEvent={selectedEvent} events={events} visibleEvents={visibleEvents} transform={transform} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onDisplayedEventsChange={setDisplayedCardEvents} />
+        <EventPanel selectedEvent={selectedEvent} events={events} visibleEvents={visibleEvents} transform={transform} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onDisplayedEventsChange={handleDisplayedEventsChange} />
       </div>
 
       {/* Geolocation Map - Right side full height */}
       <div className="h-full flex-shrink-0 relative" style={{ width: '45%', zIndex: 1 }}>
         <Suspense fallback={<div className="w-full h-full flex items-center justify-center bg-gray-800"><p>Loading map...</p></div>}>
-          <GeoMap events={displayedCardEvents} selectedEvent={selectedEvent} />
+          <GeoMap events={displayedCardEvents} selectedEvent={selectedEvent} onEventClick={handleEventClick} />
         </Suspense>
       </div>
 

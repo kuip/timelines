@@ -80,6 +80,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
   const [imagesLoaded, setImagesLoaded] = useState(0);
   const [currentTime, setCurrentTime] = useState(Date.now() / 1000);
   const [relationships, setRelationships] = useState<EventRelationship[]>([]);
+  const fetchedEventIdsRef = useRef<Set<string>>(new Set()); // Cache which events we've fetched relationships for
 
   const START_TIME = -435494878264400000;
   const END_TIME = 435457000000000000;
@@ -131,24 +132,15 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
       return isVisible;
     });
 
-    console.log('TimelineCanvas: Computing visible events', {
-      totalEvents: events.length,
-      visibleCount: visibleEvents.length,
-      timelineHeight,
-      transformK: transform.k,
-      transformY: transform.y,
-      dimensionsHeight: dimensions.height,
-    });
-
     onVisibleEventsChange(visibleEvents);
   }, [dimensions, events, transform, onVisibleEventsChange]);
 
-  // Memoize displayed card event IDs to avoid unnecessary fetches
-  const memoizedDisplayedEventIds = useMemo(() => {
+  // Memoize displayed card event IDs as a string to avoid unnecessary fetches
+  const memoizedDisplayedEventIdsStr = useMemo(() => {
     if (!displayedCardEvents || !Array.isArray(displayedCardEvents) || displayedCardEvents.length === 0) {
-      return [];
+      return '';
     }
-    return displayedCardEvents.map(e => e.id);
+    return displayedCardEvents.map(e => e.id).join(',');
   }, [displayedCardEvents]);
 
   // Fetch relationships only for displayed card events with memoization
@@ -158,16 +150,27 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
         // Only fetch relationships for displayed card events
-        if (memoizedDisplayedEventIds.length === 0) {
+        if (memoizedDisplayedEventIdsStr.length === 0) {
           setRelationships([]);
           return;
         }
 
-        // Fetch relationships only for displayed events
+        // Parse event IDs from the memoized string
+        const eventIds = memoizedDisplayedEventIdsStr.split(',');
+
+        // Only fetch for NEW events we haven't seen before
+        const newEventIds = eventIds.filter(id => !fetchedEventIdsRef.current.has(id));
+
+        if (newEventIds.length === 0) {
+          // No new events to fetch, don't make any API calls
+          return;
+        }
+
+        // Fetch relationships only for the NEW events
         const allRelationships: EventRelationship[] = [];
         const fetchedRelationshipIds = new Set<string>();
 
-        for (const eventId of memoizedDisplayedEventIds) {
+        for (const eventId of newEventIds) {
           try {
             const response = await fetch(`${apiUrl}/api/events/${eventId}/relationships`);
             if (!response.ok) continue;
@@ -183,20 +186,25 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
                 }
               }
             }
+            // Mark this event as fetched
+            fetchedEventIdsRef.current.add(eventId);
           } catch (err) {
             console.warn(`Failed to fetch relationships for event ${eventId}:`, err);
+            // Still mark as attempted to avoid retrying failed events
+            fetchedEventIdsRef.current.add(eventId);
             continue;
           }
         }
 
-        setRelationships(allRelationships);
+        // Append new relationships to existing ones
+        setRelationships(prev => [...prev, ...allRelationships]);
       } catch (err) {
         console.error('Error fetching relationships:', err);
       }
     };
 
     fetchRelationshipsForDisplayedEvents();
-  }, [memoizedDisplayedEventIds]);
+  }, [memoizedDisplayedEventIdsStr]);
 
   // Update dimensions
   useEffect(() => {
@@ -630,8 +638,6 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
           const timelineX = canvas.clientWidth / 2 + 35;
           const isShiftClick = upEvent.shiftKey;
 
-          console.log('Click detected:', { clickX, clickY, timelineX, canvasWidth: canvas.clientWidth, canvasHeight: canvas.clientHeight, modalOpen, isShiftClick });
-
           // Calculate unix_seconds for ANY click on the timeline for debug purposes
           const margin = 0;
           const timelineTop = margin;
@@ -639,13 +645,11 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
           const START_TIME = -435494878264400000;
           const END_TIME = 435457000000000000;
           const calculatedUnixSeconds = END_TIME - ((clickY - timelineTop - transform.y) / (timelineHeight * transform.k)) * (END_TIME - START_TIME);
-          console.log('Unix seconds for this click would be:', calculatedUnixSeconds, { clickY, timelineTop, transform, timelineHeight });
 
           // Check if shift-click on timeline to create new event
           const distFromTimeline = Math.abs(clickX - timelineX);
           if (isShiftClick && onShiftClick && distFromTimeline < 40) {
             const unixSeconds = END_TIME - ((clickY - timelineTop - transform.y) / (timelineHeight * transform.k)) * (END_TIME - START_TIME);
-            console.log('SHIFT-CLICK: Creating new event at unix_seconds:', unixSeconds);
             onShiftClick(unixSeconds);
             return;
           }
@@ -702,7 +706,6 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
             // Solving for unixSeconds:
             // unixSeconds = END_TIME - ((eventY - timelineTop - y) / (timelineHeight * k)) * (END_TIME - START_TIME)
             const unixSeconds = END_TIME - ((clickY - timelineTop - transform.y) / (timelineHeight * transform.k)) * (END_TIME - START_TIME);
-            console.log('CALLING onCanvasClick with:', unixSeconds);
             onCanvasClick(unixSeconds);
           }
         }

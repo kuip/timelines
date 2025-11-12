@@ -18,22 +18,25 @@ interface GeoMapProps {
   events: EventResponse[];
   selectedEvent: EventResponse | null;
   visibleEventIds?: Set<string>;
+  onEventClick?: (event: EventResponse) => void;
 }
 
-export default function GeoMap({ events, selectedEvent }: GeoMapProps) {
+export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const [locations, setLocations] = useState<EventLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const markersRef = useRef<Map<string, any>>(new Map());
+  const fetchedEventIdsRef = useRef<Set<string>>(new Set()); // Track what we've already fetched
 
-  // Memoize event IDs to avoid unnecessary fetches
-  const memoizedEventIds = useMemo(() => {
+  // Memoize event IDs as a string to detect actual content changes
+  // Using a string instead of array prevents re-triggering useEffect when array reference changes
+  const memoizedEventIdsStr = useMemo(() => {
     if (!events || !Array.isArray(events) || events.length === 0) {
-      return [];
+      return '';
     }
-    return events.map(e => e.id);
+    return events.map(e => e.id).join(',');
   }, [events]);
 
   // Fetch locations ONLY for displayed card events with memoization
@@ -43,7 +46,7 @@ export default function GeoMap({ events, selectedEvent }: GeoMapProps) {
         setLoading(true);
 
         // If no events, clear locations and return
-        if (memoizedEventIds.length === 0) {
+        if (memoizedEventIdsStr.length === 0) {
           setLocations([]);
           setError(null);
           return;
@@ -51,12 +54,23 @@ export default function GeoMap({ events, selectedEvent }: GeoMapProps) {
 
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
-        // Fetch locations only for the events passed in (displayed cards)
+        // Parse event IDs from the memoized string
+        const eventIds = memoizedEventIdsStr.split(',');
+
+        // Only fetch for NEW events we haven't seen before
+        const newEventIds = eventIds.filter(id => !fetchedEventIdsRef.current.has(id));
+
+        if (newEventIds.length === 0) {
+          // No new events to fetch, don't make any API calls
+          setLoading(false);
+          return;
+        }
+
+        // Fetch locations only for the NEW events
         const allLocations: EventLocation[] = [];
 
-        for (const eventId of memoizedEventIds) {
+        for (const eventId of newEventIds) {
           try {
-            console.log('Fetching locations for displayed card event:', eventId);
             const response = await fetch(`${apiUrl}/api/events/${eventId}/locations`);
             if (!response.ok) continue;
 
@@ -88,26 +102,29 @@ export default function GeoMap({ events, selectedEvent }: GeoMapProps) {
                 });
               }
             }
+            // Mark this event as fetched
+            fetchedEventIdsRef.current.add(eventId);
           } catch (err) {
             console.warn(`Failed to fetch locations for event ${eventId}:`, err);
+            // Still mark as attempted to avoid retrying failed events
+            fetchedEventIdsRef.current.add(eventId);
             continue;
           }
         }
 
-        console.log('Fetched locations for', memoizedEventIds.length, 'displayed card events, total locations:', allLocations.length);
-        setLocations(allLocations);
+        // Append new locations to existing ones
+        setLocations(prev => [...prev, ...allLocations]);
         setError(null);
       } catch (err) {
         console.error('Error fetching locations:', err);
         setError(`Failed to load geolocation data: ${err}`);
-        setLocations([]);
       } finally {
         setLoading(false);
       }
     };
 
     fetchLocations();
-  }, [memoizedEventIds]);
+  }, [memoizedEventIdsStr]);
 
   // Initialize map on component mount
   useEffect(() => {
@@ -173,15 +190,9 @@ export default function GeoMap({ events, selectedEvent }: GeoMapProps) {
     if (!mapRef.current || locations.length === 0) return;
 
     // Create a set of visible event IDs for faster lookup
-    const visibleEventIds = new Set(memoizedEventIds);
+    const visibleEventIds = new Set(memoizedEventIdsStr ? memoizedEventIdsStr.split(',') : []);
 
     // Log detailed information for debugging
-    console.log('GeoMap useEffect triggered:', {
-      visibleEventIds_count: visibleEventIds.size,
-      total_locations: locations.length,
-      memoized_event_ids_length: memoizedEventIds.length,
-      sample_locations: locations.slice(0, 3).map(l => ({ id: l.id, event_id: l.event_id, event_title: l.event_title })),
-    });
 
     import('leaflet').then((leafletModule) => {
       const L = leafletModule.default;
@@ -197,11 +208,9 @@ export default function GeoMap({ events, selectedEvent }: GeoMapProps) {
           }
         });
         markersRef.current.clear();
-        console.log('GeoMap: Cleared', existingMarkersCount, 'existing markers');
 
         // If no visible events, we're done - don't add any markers
         if (visibleEventIds.size === 0) {
-          console.log('GeoMap: No visible events, skipping marker creation');
           return;
         }
 
@@ -214,9 +223,6 @@ export default function GeoMap({ events, selectedEvent }: GeoMapProps) {
           // Only show markers for events that are currently visible
           // Debug: log what we're checking
           if (!visibleEventIds.has(location.event_id)) {
-            if (skippedCount < 5) {
-              console.log('Skipping location:', { location_event_id: location.event_id, visible_ids_count: visibleEventIds.size, sample_visible_ids: Array.from(visibleEventIds).slice(0, 3) });
-            }
             skippedCount++;
             return;
           }
@@ -243,17 +249,24 @@ export default function GeoMap({ events, selectedEvent }: GeoMapProps) {
               )
               .addTo(mapRef.current);
 
+            // Add click handler to open event details modal
+            marker.on('click', () => {
+              const event = events.find(e => e.id === location.event_id);
+              if (event && onEventClick) {
+                onEventClick(event);
+              }
+            });
+
             // Use location ID as key to handle multiple locations per event
             markersRef.current.set(location.id, marker);
             addedCount++;
           }
         });
-        console.log('GeoMap: Added', addedCount, 'markers | skipped (not visible):', skippedCount, '| no geometry:', noGeometryCount);
       } catch (err) {
         console.error('Error adding markers:', err);
       }
     });
-  }, [locations, memoizedEventIds]);
+  }, [locations, memoizedEventIdsStr]);
 
   // Handle selected event highlighting
   useEffect(() => {

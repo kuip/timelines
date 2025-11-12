@@ -28,6 +28,7 @@ interface EventPanelProps {
 const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleEvents, transform = { y: 0, k: 1 }, onEventClick, onTransformChange, onDisplayedEventsChange }) => {
   const [dimensions, setDimensions] = useState({ height: 0 });
   const [currentTime, setCurrentTime] = useState(Date.now() / 1000); // Current time in Unix seconds
+  const prevDisplayableIdsRef = useRef<string>('');
   const contentRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -171,10 +172,15 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
     image_url: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Cdefs%3E%3ClinearGradient id="grad" x1="0%25" y1="0%25" x2="0%25" y2="100%25"%3E%3Cstop offset="0%25" style="stop-color:%23fbbf24;stop-opacity:1" /%3E%3Cstop offset="100%25" style="stop-color:%2306b6d4;stop-opacity:1" /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width="100" height="100" fill="url(%23grad)"/%3E%3Cpath d="M 0 60 Q 25 40 50 50 T 100 60 L 100 100 L 0 100 Z" fill="%23ffffff" opacity="0.7"/%3E%3Ccircle cx="50" cy="30" r="15" fill="%23fbbf24" stroke="%23ffffff" stroke-width="2"/%3E%3C/svg%3E',
   } as unknown as EventResponse;
 
+  // Memoize visible event IDs to detect actual content changes (not just array reference)
+  const visibleEventIdsStr = useMemo(() => {
+    return visibleEvents.map(e => e.id).join(',');
+  }, [visibleEvents]);
+
   // Determine which visible events can be displayed with their titles (collision detection)
   // Use the shared collision detection function for consistency with canvas images
   // Memoize to prevent creating new array references on every render
-  // Key: Compare event IDs, not array reference, to avoid recomputing on every pan/zoom
+  // CRITICAL: Only depend on visibleEventIdsStr and dimensions.height - NOT currentTime or transform
   const displayableEvents = useMemo(() => {
     const START_TIME = -435494878264400000;
 
@@ -207,13 +213,17 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
 
     const displayableIds = getDisplayableEvents(positions, dimensions.height);
     return positions.filter(({ event }) => displayableIds.has(event.id)).map(({ event }) => event);
-  }, [visibleEvents.length, dimensions.height]);
+  }, [visibleEventIdsStr, dimensions.height]);
 
-  // Notify parent of displayed events (for GeoMap)
-  // Use memoized displayableEvents to avoid unnecessary calls
+  // Notify parent of displayed events (for GeoMap) - only if the IDs actually changed
+  // This prevents refetching location/relationship data when the same cards are displayed
   useEffect(() => {
-    if (onDisplayedEventsChange) {
-      onDisplayedEventsChange(displayableEvents);
+    if (onDisplayedEventsChange && displayableEvents.length > 0) {
+      const displayableIds = displayableEvents.map(e => e.id).join(',');
+      if (displayableIds !== prevDisplayableIdsRef.current) {
+        prevDisplayableIdsRef.current = displayableIds;
+        onDisplayedEventsChange(displayableEvents);
+      }
     }
   }, [displayableEvents, onDisplayedEventsChange]);
 

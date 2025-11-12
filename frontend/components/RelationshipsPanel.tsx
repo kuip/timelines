@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { EventResponse } from '@/types';
 
 interface Relationship {
@@ -43,6 +43,7 @@ export default function RelationshipsPanel({
   const [relationships, setRelationships] = useState<Relationship[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fetchedEventIdsRef = useRef<Set<string>>(new Set()); // Cache what we've fetched
 
   // Fetch relationships for selected event - only if it's one of the displayed card events
   useEffect(() => {
@@ -58,6 +59,11 @@ export default function RelationshipsPanel({
       return;
     }
 
+    // If we've already fetched relationships for this event, don't fetch again
+    if (fetchedEventIdsRef.current.has(selectedEvent.id)) {
+      return;
+    }
+
     const fetchRelationships = async () => {
       try {
         setLoading(true);
@@ -68,17 +74,21 @@ export default function RelationshipsPanel({
         const data = await response.json();
         setRelationships(data.relationships || []);
         setError(null);
+        // Mark this event as fetched
+        fetchedEventIdsRef.current.add(selectedEvent.id);
       } catch (err) {
         console.error('Error fetching relationships:', err);
         setError('Failed to load relationships');
         setRelationships([]);
+        // Still mark as attempted to avoid retrying
+        fetchedEventIdsRef.current.add(selectedEvent.id);
       } finally {
         setLoading(false);
       }
     };
 
     fetchRelationships();
-  }, [selectedEvent, displayedCardEvents]);
+  }, [selectedEvent?.id, displayedCardEvents.length]);
 
   if (!selectedEvent) {
     return (
