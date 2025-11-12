@@ -45,9 +45,10 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
       try {
         setLoading(true);
 
-        // If no events, clear locations and return
+        // If no events, clear locations and cache, then return
         if (memoizedEventIdsStr.length === 0) {
           setLocations([]);
+          fetchedEventIdsRef.current.clear();
           setError(null);
           return;
         }
@@ -112,8 +113,13 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
           }
         }
 
-        // Append new locations to existing ones
-        setLocations(prev => [...prev, ...allLocations]);
+        // Only keep locations for currently visible events
+        // This prevents accumulating locations for events no longer in view
+        const visibleEventIds = new Set(eventIds);
+        setLocations(prev => {
+          const filteredPrev = prev.filter(loc => visibleEventIds.has(loc.event_id));
+          return [...filteredPrev, ...allLocations];
+        });
         setError(null);
       } catch (err) {
         console.error('Error fetching locations:', err);
@@ -239,15 +245,7 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
 
             const marker = L.marker([lat, lng], {
               title: location.event_title,
-            })
-              .bindPopup(
-                `<div class="p-2">
-                  <h3 class="font-bold">${location.event_title}</h3>
-                  <p class="text-sm">${location.location_name}</p>
-                  <p class="text-xs text-gray-500">Confidence: ${location.confidence_score}%</p>
-                </div>`
-              )
-              .addTo(mapRef.current);
+            }).addTo(mapRef.current);
 
             // Add click handler to open event details modal
             marker.on('click', () => {
@@ -299,7 +297,7 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
         {loading && <p className="text-xs text-gray-400">Loading locations...</p>}
         {error && <p className="text-xs text-red-400">{error}</p>}
         {!loading && !error && (
-          <p className="text-xs text-gray-400">{locations.length} events with locations</p>
+          <p className="text-xs text-gray-400">{locations.length} location{locations.length !== 1 ? 's' : ''}</p>
         )}
       </div>
 
