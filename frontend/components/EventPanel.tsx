@@ -131,56 +131,6 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
     return calculateEventY(unixSeconds, timelineHeight, transform);
   }, [dimensions.height, transform]);
 
-  // Notify parent of displayed events (for GeoMap)
-  // Must match exactly what gets rendered (including Now and Future Horizon if visible)
-  useEffect(() => {
-    const START_TIME = -435494878264400000;
-    const now = Math.floor(Date.now() / 1000);
-    const FUTURE_HORIZON_TIME = now + (200 * 31536000);
-
-    // Skip if dimensions not ready
-    if (dimensions.height === 0) {
-      return;
-    }
-
-    // Filter visible events to exclude those beyond Future Horizon
-    const filteredVisibleEvents = visibleEvents.filter((event) => {
-      const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
-      return unixSeconds >= START_TIME && unixSeconds <= FUTURE_HORIZON_TIME;
-    });
-
-    const allVisibleEvents = [...filteredVisibleEvents];
-
-    // Add Now event if it's within view (matches rendering logic)
-    const nowY = getEventY(currentTime);
-    if (nowY >= 0 && nowY <= dimensions.height) {
-      allVisibleEvents.push(nowEvent);
-    }
-
-    // Add Future Horizon event if it's within view (matches rendering logic)
-    const futureY = getEventY(FUTURE_HORIZON_TIME);
-    if (futureY >= 0 && futureY <= dimensions.height) {
-      allVisibleEvents.push(futureHorizonEvent);
-    }
-
-    // Build event array with Y positions for collision detection
-    const eventsWithY = allVisibleEvents.map((event) => ({
-      event,
-      y: getEventY(typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any))
-    }));
-
-    // Apply collision detection to get only displayable event IDs
-    const displayableIds = getDisplayableEvents(eventsWithY, dimensions.height);
-
-    // Filter to keep only displayable events - now matches what's actually rendered
-    const displayableEvents = allVisibleEvents.filter(e => displayableIds.has(e.id));
-
-    // Notify parent of displayable events only
-    if (onDisplayedEventsChange) {
-      onDisplayedEventsChange(displayableEvents);
-    }
-  }, [visibleEvents, getEventY, dimensions.height, onDisplayedEventsChange, currentTime]);
-
   // Create a "Now" event for display
   // Always use real time (Date.now()) not the state currentTime which may be stale
   const realNowSeconds = Date.now() / 1000;
@@ -256,7 +206,15 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
 
     const displayableIds = getDisplayableEvents(positions, dimensions.height);
     return positions.filter(({ event }) => displayableIds.has(event.id)).map(({ event }) => event);
-  }, [visibleEvents, getEventY, currentTime, dimensions.height, FUTURE_HORIZON_TIME, nowEvent, futureHorizonEvent]);
+  }, [visibleEvents, dimensions.height]);
+
+  // Notify parent of displayed events (for GeoMap)
+  // Use memoized displayableEvents to avoid unnecessary calls
+  useEffect(() => {
+    if (onDisplayedEventsChange) {
+      onDisplayedEventsChange(displayableEvents);
+    }
+  }, [displayableEvents, onDisplayedEventsChange]);
 
   return (
     <div
