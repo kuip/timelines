@@ -28,6 +28,7 @@ export interface Event {
   created_at: string;
   updated_at: string;
   created_by_user_id?: string;
+  image_url?: string;
 }
 
 export interface EventResponse extends Event {
@@ -35,7 +36,6 @@ export interface EventResponse extends Event {
   vote_stats?: VoteStats;
   source_count: number;
   discussion_count: number;
-  image_url?: string;
 }
 
 export interface VoteStats {

@@ -1,7 +1,20 @@
 import axios from 'axios';
 import { EventResponse, EventQueryParams, ZoomPreset } from '@/types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+// Dynamically determine API URL based on current location
+const getApiUrl = (): string => {
+  if (typeof window === 'undefined') {
+    // Server-side: use environment variable or default
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  }
+
+  // Client-side: use current host but with port 8080 for backend
+  const host = window.location.hostname;
+  const protocol = window.location.protocol;
+  return `${protocol}//${host}:8080`;
+};
+
+const API_URL = getApiUrl();
 
 const api = axios.create({
   baseURL: `${API_URL}/api`,

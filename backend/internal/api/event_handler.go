@@ -27,12 +27,24 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 		return
 	}
 
+	// Validate category if provided
+	if req.Category != nil && *req.Category != "" {
+		if !utils.IsValidCategory(*req.Category) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "Invalid category",
+				"category": *req.Category,
+				"message": "Category does not exist in the valid categories list",
+			})
+			return
+		}
+	}
+
 	// TODO: Get user ID from auth context
 	var userID *string = nil
 
 	event, err := h.repo.Create(req, userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create event"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create event", "details": err.Error()})
 		return
 	}
 

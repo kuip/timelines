@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { EventResponse } from '@/types';
 import { calculateEventY, getDisplayableEvents } from '@/lib/coordinateHelper';
+import { getEventImageUrl } from '@/lib/imageHelper';
 
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   cosmic: { bg: '#8b5cf6', text: '#f5e6ff' },
@@ -20,13 +21,83 @@ interface EventPanelProps {
   visibleEvents: EventResponse[];
   transform?: { y: number; k: number };
   onEventClick?: (event: EventResponse) => void;
+  onTransformChange?: (transform: { y: number; k: number }) => void;
 }
 
-const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleEvents, transform = { y: 0, k: 1 }, onEventClick }) => {
+const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleEvents, transform = { y: 0, k: 1 }, onEventClick, onTransformChange }) => {
   const [dimensions, setDimensions] = useState({ height: 0 });
   const [currentTime, setCurrentTime] = useState(Date.now() / 1000); // Current time in Unix seconds
   const contentRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // Track dragging state using ref to avoid closure issues
+  const dragStateRef = useRef({ isDragging: false, lastY: 0 });
+
+  // Combined setup for mouse gestures
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || !onTransformChange) return;
+
+    // Handler for wheel zoom
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+
+      const rect = panel.getBoundingClientRect();
+      const mouseY = e.clientY - rect.top;
+
+      // Same zoom sensitivity as canvas
+      const delta = e.deltaY > 0 ? 1.033 : 0.967;
+      const newK = Math.max(1, Math.min(1e18, transform.k * delta));
+
+      const oldWorldY = (transform.y - mouseY) / transform.k;
+
+      const newTransform = {
+        y: oldWorldY * newK + mouseY,
+        k: newK
+      };
+
+      onTransformChange(newTransform);
+    };
+
+    // Handler for mouse down to start drag
+    const handleMouseDown = (e: MouseEvent) => {
+      if (!(e.target instanceof Node) || !panel.contains(e.target)) return;
+      dragStateRef.current = { isDragging: true, lastY: e.clientY };
+    };
+
+    // Handler for mouse move during drag
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!dragStateRef.current.isDragging) return;
+
+      const deltaY = e.clientY - dragStateRef.current.lastY;
+      const newTransform = {
+        ...transform,
+        y: transform.y + deltaY
+      };
+
+      onTransformChange(newTransform);
+      dragStateRef.current.lastY = e.clientY;
+    };
+
+    // Handler for mouse up to stop drag
+    const handleMouseUp = () => {
+      dragStateRef.current.isDragging = false;
+    };
+
+    // Register all listeners
+    panel.addEventListener('wheel', handleWheel, { passive: false });
+    panel.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    // Cleanup
+    return () => {
+      panel.removeEventListener('wheel', handleWheel);
+      panel.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [transform, onTransformChange]);
 
   // Track panel height for coordinate calculations (full panel height)
   useEffect(() => {
@@ -86,14 +157,25 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
     unix_seconds: realNowSeconds,
     formatted_time: getFormattedNowTime(),
     category: 'contemporary' as const,
+    image_url: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="45" fill="%23ec4899" stroke="%23ffffff" stroke-width="2"/%3E%3Cline x1="50" y1="15" x2="50" y2="30" stroke="%23ffffff" stroke-width="3" stroke-linecap="round"/%3E%3Cline x1="50" y1="70" x2="50" y2="85" stroke="%23ffffff" stroke-width="3" stroke-linecap="round"/%3E%3Cline x1="15" y1="50" x2="30" y2="50" stroke="%23ffffff" stroke-width="3" stroke-linecap="round"/%3E%3Cline x1="70" y1="50" x2="85" y2="50" stroke="%23ffffff" stroke-width="3" stroke-linecap="round"/%3E%3Cline x1="50" y1="50" x2="50" y2="65" stroke="%23ffffff" stroke-width="2"/%3E%3Cline x1="50" y1="50" x2="65" y2="50" stroke="%23ffffff" stroke-width="2"/%3E%3C/svg%3E',
+  } as unknown as EventResponse;
+
+  // Create Future Horizon event
+  const now = Math.floor(Date.now() / 1000);
+  const FUTURE_HORIZON_TIME = now + (200 * 31536000); // Now + 200 years
+  const futureHorizonEvent = {
+    id: 'future-horizon',
+    title: 'Future Horizon',
+    unix_seconds: FUTURE_HORIZON_TIME,
+    formatted_time: '200 years from now',
+    category: 'contemporary' as const,
+    image_url: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Cdefs%3E%3ClinearGradient id="grad" x1="0%25" y1="0%25" x2="0%25" y2="100%25"%3E%3Cstop offset="0%25" style="stop-color:%23fbbf24;stop-opacity:1" /%3E%3Cstop offset="100%25" style="stop-color:%2306b6d4;stop-opacity:1" /%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width="100" height="100" fill="url(%23grad)"/%3E%3Cpath d="M 0 60 Q 25 40 50 50 T 100 60 L 100 100 L 0 100 Z" fill="%23ffffff" opacity="0.7"/%3E%3Ccircle cx="50" cy="30" r="15" fill="%23fbbf24" stroke="%23ffffff" stroke-width="2"/%3E%3C/svg%3E',
   } as unknown as EventResponse;
 
   // Determine which visible events can be displayed with their titles (collision detection)
   // Use the shared collision detection function for consistency with canvas images
   const displayableEvents = (() => {
     const START_TIME = -435494878264400000;
-    const now = Math.floor(Date.now() / 1000);
-    const FUTURE_HORIZON_TIME = now + (200 * 31536000); // Now + 200 years
 
     // Filter visible events to exclude those beyond Future Horizon
     const filteredVisibleEvents = visibleEvents.filter((event) => {
@@ -109,6 +191,12 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
       allVisibleEvents.push(nowEvent);
     }
 
+    // Add Future Horizon event if it's within view
+    const futureY = getEventY(FUTURE_HORIZON_TIME);
+    if (futureY >= 0 && futureY <= dimensions.height) {
+      allVisibleEvents.push(futureHorizonEvent);
+    }
+
     if (allVisibleEvents.length === 0) return [];
 
     const positions = allVisibleEvents.map((event) => ({
@@ -121,7 +209,11 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
   })();
 
   return (
-    <div ref={panelRef} className="h-full bg-gray-900 text-gray-100 flex flex-col relative" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
+    <div
+      ref={panelRef}
+      className="h-full bg-gray-900 text-gray-100 flex flex-col relative"
+      style={{ fontFamily: '"Roboto Condensed", sans-serif' }}
+    >
       {/* Content - Synchronized visible events with vertical alignment */}
       <div ref={contentRef} className="h-full relative">
         {displayableEvents.length > 0 ? (
@@ -151,11 +243,13 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                   return null;
                 }
 
-              // Use the same max size as canvas images (100px) for perfect alignment
+              // Fixed card height of 100px
               const cardHeight = 100;
 
-              // Special rendering for "Now" event - show time in MM:SS format as image
+              // Special rendering for "Now" and "Future Horizon" events
               const isNowEvent = event.id === 'now';
+              const isFutureHorizonEvent = event.id === 'future-horizon';
+              const isSpecialEvent = isNowEvent || isFutureHorizonEvent;
               const timeDisplay = isNowEvent ? (() => {
                 const now = new Date();
                 const minutes = now.getUTCMinutes().toString().padStart(2, '0');
@@ -176,54 +270,182 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                   }}
                   className="w-full"
                 >
-                  {isNowEvent ? (
-                    // Special card for "Now" event
-                    <div className="p-3 bg-gray-900 rounded border-2 border-gray-300 cursor-pointer transition overflow-hidden flex flex-col" style={{ height: '100%' }}>
-                      {/* Event Title */}
-                      <h3 className="text-base font-bold text-gray-100 mb-2 flex-shrink-0">
-                        {event.title}
-                      </h3>
+                  {isSpecialEvent ? (
+                    // Special card for "Now" and "Future Horizon" events - same format as regular events
+                    <div
+                      className="p-2 bg-gray-800 rounded border border-gray-700 cursor-pointer transition overflow-hidden flex flex-row gap-2"
+                      style={{
+                        height: '100%',
+                        borderLeft: `6px solid ${event.category && CATEGORY_COLORS[event.category]?.bg ? CATEGORY_COLORS[event.category].bg : '#3b82f6'}`
+                      }}
+                    >
+                      {/* Event Image - Square container on left */}
+                      {(() => {
+                        const imageUrl = event.image_url;
+                        return imageUrl ? (
+                          <div className="w-20 h-20 bg-gray-900 rounded flex-shrink-0 border border-gray-600 overflow-hidden">
+                            <img
+                              src={imageUrl}
+                              alt={event.title}
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        ) : null;
+                      })()}
 
-                      {/* Event Time - All resolutions */}
-                      <div className="text-sm text-gray-200 font-mono font-semibold flex-shrink-0 overflow-hidden">
-                        {event.formatted_time}
+                      {/* Content on right */}
+                      <div className="flex flex-col flex-1 overflow-hidden">
+                        {/* First line: Time and Category Tag */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {/* Event Time - All resolutions */}
+                          <div className="text-xs text-blue-400 font-bold whitespace-nowrap">
+                            {event.formatted_time}
+                          </div>
+
+                          {/* Category Tag */}
+                          {event.category && (
+                            <span
+                              className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0 w-fit"
+                              style={{
+                                backgroundColor: CATEGORY_COLORS[event.category]?.bg || '#3b82f6',
+                                color: CATEGORY_COLORS[event.category]?.text || '#eff6ff'
+                              }}
+                            >
+                              {event.category.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Event Title */}
+                        <h3 className="text-xs font-bold text-white flex-shrink-0">
+                          {event.title}
+                        </h3>
+
+                        {/* Event Description */}
+                        {event.description && (
+                          <p className="text-xs text-gray-300 overflow-hidden line-clamp-1">
+                            {event.description}
+                          </p>
+                        )}
                       </div>
                     </div>
                   ) : (
-                    // Regular event card
+                    // Regular event card - image on left, content on right
                     <div
-                      onClick={() => onEventClick?.(event)}
-                      className="p-3 bg-gray-800 rounded border border-gray-700 hover:border-blue-500 cursor-pointer transition overflow-hidden flex flex-col" style={{ height: '100%' }}
+                      className="p-2 bg-gray-800 rounded border border-gray-700 transition overflow-hidden flex flex-row gap-2"
+                      style={{
+                        height: '100%',
+                        borderLeft: `6px solid ${event.category && CATEGORY_COLORS[event.category]?.bg ? CATEGORY_COLORS[event.category].bg : '#3b82f6'}`
+                      }}
                     >
-                      {/* Event Title */}
-                      <h3 className="text-sm font-bold text-white mb-1 flex-shrink-0">
-                        {event.title}
-                      </h3>
+                      {/* Event Image - Square container on left */}
+                      {(() => {
+                        const imageUrl = getEventImageUrl(event);
+                        return imageUrl ? (
+                          <div
+                            onClick={() => onEventClick?.(event)}
+                            className="w-20 h-20 bg-gray-900 rounded flex-shrink-0 border border-gray-600 overflow-hidden hover:border-blue-500 cursor-pointer transition"
+                          >
+                            <img
+                              src={imageUrl}
+                              alt={event.title}
+                              className="w-full h-full object-contain"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        ) : null;
+                      })()}
 
-                      {/* Event Time */}
-                      <div className="text-xs text-blue-400 font-bold mb-2 flex-shrink-0">
-                        {event.formatted_time}
+                      {/* Content on right */}
+                      <div className="flex flex-col flex-1 overflow-hidden">
+                        {/* First line: Time and Category Tag */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {/* Event Time - Year, Month, Day, Time */}
+                          <div className="text-xs text-blue-400 font-bold whitespace-nowrap">
+                            {(() => {
+                              if (!event.unix_seconds) return '';
+
+                              // First, calculate years ago/future for any event
+                              const now = Date.now() / 1000;
+                              const diffSeconds = now - event.unix_seconds;
+                              const diffYears = Math.abs(diffSeconds) / 31536000; // seconds per year
+
+                              // For events more than 1000 years old/future, show in BC/AD or year format
+                              if (diffYears > 1000) {
+                                if (diffYears > 1000000000) {
+                                  const billions = (diffYears / 1000000000).toFixed(1);
+                                  return diffSeconds > 0 ? `${billions} billion years ago` : `${billions} billion years future`;
+                                } else if (diffYears > 1000000) {
+                                  const millions = (diffYears / 1000000).toFixed(1);
+                                  return diffSeconds > 0 ? `${millions} million years ago` : `${millions} million years future`;
+                                } else {
+                                  // For thousands of years, show as BC year or century
+                                  const dateMs = event.unix_seconds * 1000;
+                                  const date = new Date(dateMs);
+                                  const year = date.getUTCFullYear();
+
+                                  if (year < 0) {
+                                    // BC format: convert negative year to BC notation
+                                    const bcYear = Math.abs(year) - 1; // JavaScript negative year = (BC year + 1)
+                                    return `${bcYear} BC`;
+                                  } else {
+                                    // For our era (year 1 onwards), just show the year without "AD"
+                                    return `${year}`;
+                                  }
+                                }
+                              }
+
+                              // For recent events, show precise date/time
+                              const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                              const dateMs = event.unix_seconds * 1000;
+                              const date = new Date(dateMs);
+
+                              // Check if date is valid
+                              if (isNaN(date.getTime())) {
+                                return 'Ancient/Far future';
+                              }
+
+                              const year = date.getUTCFullYear();
+                              const month = months[date.getUTCMonth()];
+                              const day = String(date.getUTCDate()).padStart(2, '0');
+                              const hours = String(date.getUTCHours()).padStart(2, '0');
+                              const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+
+                              return `${year} ${month} ${day}\u00A0\u00A0\u00A0${hours}:${minutes}`;
+                            })()}
+                          </div>
+
+                          {/* Category Tag */}
+                          {event.category && (
+                            <span
+                              className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0 w-fit"
+                              style={{
+                                backgroundColor: CATEGORY_COLORS[event.category]?.bg || '#3b82f6',
+                                color: CATEGORY_COLORS[event.category]?.text || '#eff6ff'
+                              }}
+                            >
+                              {event.category.toUpperCase()}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Event Title */}
+                        <h3 className="text-xs font-bold text-white flex-shrink-0">
+                          {event.title}
+                        </h3>
+
+                        {/* Event Description */}
+                        {event.description && (
+                          <p className="text-xs text-gray-300 overflow-hidden line-clamp-1">
+                            {event.description}
+                          </p>
+                        )}
                       </div>
-
-                      {/* Category */}
-                      {event.category && (
-                        <span
-                          className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0"
-                          style={{
-                            backgroundColor: CATEGORY_COLORS[event.category]?.bg || '#3b82f6',
-                            color: CATEGORY_COLORS[event.category]?.text || '#eff6ff'
-                          }}
-                        >
-                          {event.category.toUpperCase()}
-                        </span>
-                      )}
-
-                      {/* Event Description */}
-                      {event.description && (
-                        <p className="text-xs text-gray-300 mt-2 flex-1 overflow-hidden line-clamp-3">
-                          {event.description}
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>

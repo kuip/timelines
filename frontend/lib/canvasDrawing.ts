@@ -29,7 +29,7 @@ export const drawTimelineLine = (
 };
 
 /**
- * Draw the "Now" marker (dashed line + time display box)
+ * Draw the "Now" marker (dashed line only - text is rendered as SVG overlay)
  */
 export const drawNowMarker = (
   ctx: CanvasRenderingContext2D,
@@ -46,39 +46,6 @@ export const drawNowMarker = (
   ctx.lineTo(dimensions.width, nowY);
   ctx.stroke();
   ctx.setLineDash([]);
-
-  // Draw time display box (same dimensions as event images)
-  const now = new Date();
-  const year = now.getUTCFullYear();
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = monthNames[now.getUTCMonth()];
-  const day = now.getUTCDate().toString().padStart(2, '0');
-  const hours = now.getUTCHours().toString().padStart(2, '0');
-  const minutes = now.getUTCMinutes().toString().padStart(2, '0');
-  const seconds = now.getUTCSeconds().toString().padStart(2, '0');
-
-  const timeStr = `Now: ${hours}:${minutes}:${seconds}`;
-  const dateStr = `${year} ${month} ${day}`;
-
-  const DISPLAY_SIZE = 100;
-  const boxX = timelineX + 7;
-  const boxY = nowY - DISPLAY_SIZE / 2;
-
-  // Background box
-  ctx.fillStyle = '#1f2937';
-  ctx.fillRect(boxX, boxY, DISPLAY_SIZE, DISPLAY_SIZE);
-  ctx.strokeStyle = '#374151';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(boxX, boxY, DISPLAY_SIZE, DISPLAY_SIZE);
-
-  // Time and date text (centered, as large as fitting)
-  ctx.fillStyle = '#9ca3af';
-  ctx.font = 'bold 14px "Roboto Condensed", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  ctx.fillText(timeStr, boxX + DISPLAY_SIZE / 2, boxY + DISPLAY_SIZE / 2 - 10);
-  ctx.fillText(dateStr, boxX + DISPLAY_SIZE / 2, boxY + DISPLAY_SIZE / 2 + 10);
 };
 
 /**
@@ -93,6 +60,26 @@ export const drawFutureOverlay = (
     ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
     ctx.fillRect(0, 0, dimensions.width, nowY);
   }
+};
+
+/**
+ * Draw the "Future Horizon" marker (dashed line only - text is rendered in EventPanel card)
+ */
+export const drawFutureHorizonMarker = (
+  ctx: CanvasRenderingContext2D,
+  futureY: number,
+  timelineX: number,
+  dimensions: { width: number; height: number }
+) => {
+  // Draw dashed line on right side only (50% gray)
+  ctx.strokeStyle = 'rgba(155, 160, 163, 0.5)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.moveTo(timelineX, futureY);
+  ctx.lineTo(dimensions.width, futureY);
+  ctx.stroke();
+  ctx.setLineDash([]);
 };
 
 /**
@@ -112,7 +99,7 @@ export const drawTick = (
 };
 
 /**
- * Draw a tick label
+ * Draw a tick label (supports multi-line labels with \n separator)
  */
 export const drawTickLabel = (
   ctx: CanvasRenderingContext2D,
@@ -121,14 +108,32 @@ export const drawTickLabel = (
   y: number
 ) => {
   ctx.fillStyle = '#9ca3af';
-  ctx.font = '10px "Roboto Condensed", sans-serif';
+  ctx.font = 'bold 13px "Roboto Condensed", sans-serif'; // 1.3x bigger (10px * 1.3 = 13px)
   ctx.textAlign = 'right';
   ctx.textBaseline = 'middle';
-  ctx.fillText(label, x, y);
+
+  const lines = label.split('\n');
+  const lineHeight = 15.6; // ~1.2x font size for spacing (13px * 1.2)
+
+  // Position 3px to the left
+  const adjustedX = x - 3;
+
+  if (lines.length === 1) {
+    // Single line - draw at y position
+    ctx.fillText(lines[0], adjustedX, y);
+  } else {
+    // Multi-line - center vertically around y position
+    const totalHeight = (lines.length - 1) * lineHeight;
+    const startY = y - totalHeight / 2;
+
+    lines.forEach((line, index) => {
+      ctx.fillText(line, adjustedX, startY + index * lineHeight);
+    });
+  }
 };
 
 /**
- * Draw extremity labels (at top and bottom of canvas)
+ * Draw extremity labels (at top and bottom of canvas, supports multi-line with \n)
  */
 export const drawExtremityLabels = (
   ctx: CanvasRenderingContext2D,
@@ -142,13 +147,21 @@ export const drawExtremityLabels = (
   ctx.font = 'bold 16px "Roboto Condensed", sans-serif';
   ctx.textAlign = 'right';
 
+  const lineHeight = 18; // ~1.125x font size (16px * 1.125)
+
   // Top label
   ctx.textBaseline = 'top';
-  ctx.fillText(topLabel, dimensions.width - 5, 2);
+  const topLines = topLabel.split('\n');
+  topLines.forEach((line, index) => {
+    ctx.fillText(line, dimensions.width - 5, 2 + index * lineHeight);
+  });
 
   // Bottom label
   ctx.textBaseline = 'bottom';
-  ctx.fillText(bottomLabel, dimensions.width - 5, dimensions.height - 2);
+  const bottomLines = bottomLabel.split('\n');
+  bottomLines.forEach((line, index) => {
+    ctx.fillText(line, dimensions.width - 5, dimensions.height - 2 - (bottomLines.length - 1 - index) * lineHeight);
+  });
 };
 
 /**
@@ -251,12 +264,29 @@ export const drawEventImage = (
   ctx.lineWidth = 1;
   ctx.strokeRect(imgX, imgY, displaySize, displaySize);
 
-  // Draw image
+  // Draw image with aspect ratio preservation
   try {
-    const drawX = imgX + padding;
-    const drawY = imgY + padding;
-    const drawWidth = displaySize - padding * 2;
-    const drawHeight = displaySize - padding * 2;
+    const availableSize = displaySize - padding * 2;
+    const imgAspectRatio = img.width / img.height;
+    const squareAspectRatio = 1; // Square container
+
+    let drawWidth: number;
+    let drawHeight: number;
+
+    if (imgAspectRatio > squareAspectRatio) {
+      // Image is wider than tall - fit to width
+      drawWidth = availableSize;
+      drawHeight = availableSize / imgAspectRatio;
+    } else {
+      // Image is taller than wide - fit to height
+      drawHeight = availableSize;
+      drawWidth = availableSize * imgAspectRatio;
+    }
+
+    // Center the image within the available space
+    const drawX = imgX + padding + (availableSize - drawWidth) / 2;
+    const drawY = imgY + padding + (availableSize - drawHeight) / 2;
+
     ctx.drawImage(img, drawX, drawY, drawWidth, drawHeight);
   } catch (e) {
     // Image not ready yet

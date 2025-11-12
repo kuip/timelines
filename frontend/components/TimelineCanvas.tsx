@@ -2,27 +2,28 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { EventResponse } from '@/types';
-import { getEventImageUrl, calculateImageDimensions } from '@/lib/imageHelper';
 import { calculateEventY, getDisplayableEvents, getFutureHorizonTime } from '@/lib/coordinateHelper';
+import { useZoomThresholds } from '@/lib/useZoomThresholds';
 import {
   TIME_UNITS,
   selectDisplayUnit,
   generateCalendarTicks,
   generateFixedUnitTicks,
   formatDateLabel,
+  formatExtremityDateLabel,
   formatExtremityLabels,
 } from '@/lib/tickGeneration';
 import {
   CATEGORY_COLORS,
   drawTimelineLine,
   drawNowMarker,
+  drawFutureHorizonMarker,
   drawFutureOverlay,
   drawTick,
   drawTickLabel,
   drawExtremityLabels,
   drawEventMarker,
   drawRelationshipArc,
-  drawEventImage,
 } from '@/lib/canvasDrawing';
 import {
   constrainTransform,
@@ -37,8 +38,11 @@ interface TimelineCanvasProps {
   onTransformChange?: (transform: Transform) => void;
   onVisibleEventsChange?: (visibleEvents: EventResponse[]) => void;
   onCanvasClick?: (unixSeconds: number) => void;
+  onShiftClick?: (unixSeconds: number) => void;
+  onDimensionsChange?: (dimensions: { width: number; height: number }) => void;
   modalOpen?: boolean;
   initialTransform?: Transform;
+  transform?: Transform;
 }
 
 const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
@@ -47,13 +51,20 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
   onTransformChange,
   onVisibleEventsChange,
   onCanvasClick,
+  onShiftClick,
+  onDimensionsChange,
   modalOpen,
   initialTransform,
+  transform: propsTransform,
 }) => {
+  const thresholds = useZoomThresholds();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-  const [transform, setTransform] = useState<Transform>(initialTransform || { y: 0, k: 1 });
+  // Use propsTransform if provided by parent, otherwise manage locally
+  const [localTransform, setLocalTransform] = useState<Transform>(initialTransform || { y: 0, k: 1 });
+  const transform = propsTransform || localTransform;
+  const setTransform = propsTransform ? () => {} : setLocalTransform; // No-op if using props
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
   const [imagesLoaded, setImagesLoaded] = useState(0);
   const [currentTime, setCurrentTime] = useState(Date.now() / 1000);
@@ -70,12 +81,14 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // Notify parent of transform changes
+  // Notify parent of transform changes (only in uncontrolled mode)
+  // In controlled mode (propsTransform provided), don't notify parent since
+  // the parent already manages the transform state and sends it back as props
   useEffect(() => {
-    if (onTransformChange) {
+    if (!propsTransform && onTransformChange) {
       onTransformChange(transform);
     }
-  }, [transform, onTransformChange]);
+  }, [transform, onTransformChange, propsTransform]);
 
   // Compute and notify parent of visible events
   useEffect(() => {
@@ -92,24 +105,28 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     });
 
     onVisibleEventsChange(visibleEvents);
-  }, [dimensions, events, transform, onVisibleEventsChange, START_TIME, END_TIME]);
+  }, [dimensions, events, transform, onVisibleEventsChange]);
 
   // Update dimensions
   useEffect(() => {
     const updateDimensions = () => {
       if (containerRef.current) {
         const rect = containerRef.current.getBoundingClientRect();
-        setDimensions({
+        const newDimensions = {
           width: rect.width,
           height: rect.height,
-        });
+        };
+        setDimensions(newDimensions);
+        if (onDimensionsChange) {
+          onDimensionsChange(newDimensions);
+        }
       }
     };
 
     updateDimensions();
     window.addEventListener('resize', updateDimensions);
     return () => window.removeEventListener('resize', updateDimensions);
-  }, []);
+  }, [onDimensionsChange]);
 
   // Main canvas drawing
   useEffect(() => {
@@ -119,12 +136,16 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas size
+    // Get device pixel ratio for crisp text rendering
     const dpr = window.devicePixelRatio || 1;
+
+    // Set canvas size with DPR for crisp rendering
     canvas.width = dimensions.width * dpr;
     canvas.height = dimensions.height * dpr;
     canvas.style.width = dimensions.width + 'px';
     canvas.style.height = dimensions.height + 'px';
+
+    // Scale context for DPR
     ctx.scale(dpr, dpr);
 
     // Clear
@@ -138,7 +159,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     }
 
     const margin = 0;
-    const timelineX = dimensions.width / 2 + 35;
+    const timelineX = dimensions.width / 2 + 43;
     const timelineHeight = dimensions.height - margin * 2;
     const timelineTop = margin;
 
@@ -176,15 +197,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    // Draw Big Bang marker (dotted line on right side only)
-    ctx.strokeStyle = 'rgba(155, 160, 163, 0.5)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    ctx.moveTo(timelineX, bigBangY);
-    ctx.lineTo(dimensions.width, bigBangY);
-    ctx.stroke();
-    ctx.setLineDash([]);
+    // Big Bang marker removed
 
     // Draw arc for all past: from Now to Big Bang at the edge of canvas (4px inset)
     const arcRadius = 30;
@@ -210,79 +223,99 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     ctx.stroke();
     ctx.globalAlpha = 1;
 
-    // Draw NOW marker (dotted line and info box)
-    drawNowMarker(ctx, nowY, timelineX, dimensions);
+    // NOW marker removed
 
-    // Draw reduced opacity zone from Now to Future Horizon
-    if (futureHorizonY < nowY) {
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-      ctx.fillRect(0, futureHorizonY, dimensions.width, nowY - futureHorizonY);
-    }
+    // Future overlay removed
 
-    // Draw Future Horizon line and label (50% gray, right side only)
-    ctx.strokeStyle = 'rgba(155, 160, 163, 0.5)';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]);
-    ctx.beginPath();
-    ctx.moveTo(timelineX, futureHorizonY);
-    ctx.lineTo(dimensions.width, futureHorizonY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Draw Future Horizon label (50% gray)
-    ctx.fillStyle = 'rgba(155, 160, 163, 0.5)';
-    ctx.font = '10px "Roboto Condensed", sans-serif';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText('Future Horizon', dimensions.width - 5, futureHorizonY - 5);
+    // Future Horizon marker removed
 
     // Draw ticks and labels
     const visibleRange = (END_TIME - START_TIME) / transform.k;
     const topSeconds = END_TIME - (Math.abs(transform.y) / timelineHeight) * visibleRange + timelineHeight * visibleRange / timelineHeight;
     const bottomSeconds = END_TIME - (Math.abs(transform.y) + timelineHeight) / timelineHeight * visibleRange - timelineHeight * visibleRange / timelineHeight;
 
-    const { unit: unitToDisplay, index: unitIndexToDisplay } = selectDisplayUnit(visibleRange, timelineHeight);
+    // Select unit based on zoom level using JSON thresholds
+    const result = selectDisplayUnit(visibleRange, timelineHeight, 32);
+
+    let unitToDisplay;
+    let unitIndexToDisplay;
+    let tickMinSpacing = 32; // Default
+
+    // Find the first threshold where k is greater than the threshold value
+    let matchedThreshold = null;
+    for (const threshold of thresholds) {
+      if (transform.k > threshold.k) {
+        matchedThreshold = threshold;
+        tickMinSpacing = threshold.minPixelSpacing;
+        break;
+      }
+    }
+
+    if (matchedThreshold) {
+      // Use the matched threshold
+      unitToDisplay = {
+        quantity: matchedThreshold.quantity,
+        unit: matchedThreshold.unit,
+        seconds: matchedThreshold.seconds,
+        precision: matchedThreshold.precision
+      };
+      unitIndexToDisplay = 0; // Will be set based on unit type
+    } else {
+      // Fallback to auto-selection
+      unitToDisplay = result.unit;
+      unitIndexToDisplay = result.index;
+    }
 
     let ticksToRender: number[] = [];
+
+    // tickMinSpacing is now set from the matched threshold above
 
     if (unitToDisplay.precision === 'century') {
       // For centuries, check if we should show decade ticks
       // Calculate spacing between decade ticks
-      const decadeTicks = generateCalendarTicks(bottomSeconds, topSeconds, 'century');
+      const decadeTicks = generateCalendarTicks(bottomSeconds, topSeconds, 'century', timelineHeight, tickMinSpacing);
       if (decadeTicks.length >= 2) {
         const y1 = yScale(decadeTicks[0]);
         const y2 = yScale(decadeTicks[1]);
         const pixelsPerDecade = Math.abs(y2 - y1);
 
-        // Only show decade ticks if spacing > 20px
-        if (pixelsPerDecade > 20) {
+        // Only show decade ticks if spacing > tickMinSpacing
+        if (pixelsPerDecade > tickMinSpacing) {
           ticksToRender = decadeTicks;
         } else {
           // Use fixed unit ticks for centuries
-          ticksToRender = generateFixedUnitTicks(bottomSeconds, topSeconds, unitToDisplay.seconds);
+          ticksToRender = generateFixedUnitTicks(bottomSeconds, topSeconds, unitToDisplay.seconds, timelineHeight, tickMinSpacing);
         }
       } else {
-        ticksToRender = generateFixedUnitTicks(bottomSeconds, topSeconds, unitToDisplay.seconds);
+        ticksToRender = generateFixedUnitTicks(bottomSeconds, topSeconds, unitToDisplay.seconds, timelineHeight, tickMinSpacing);
       }
     } else if (unitToDisplay.precision === 'year' || unitToDisplay.precision === 'month') {
-      ticksToRender = generateCalendarTicks(bottomSeconds, topSeconds, unitToDisplay.precision);
+      ticksToRender = generateCalendarTicks(bottomSeconds, topSeconds, unitToDisplay.precision, timelineHeight, tickMinSpacing);
       if (ticksToRender.length === 0) {
-        ticksToRender = generateFixedUnitTicks(bottomSeconds, topSeconds, unitToDisplay.seconds);
+        ticksToRender = generateFixedUnitTicks(bottomSeconds, topSeconds, unitToDisplay.seconds, timelineHeight, tickMinSpacing);
       }
     } else {
-      ticksToRender = generateFixedUnitTicks(bottomSeconds, topSeconds, unitToDisplay.seconds);
+      ticksToRender = generateFixedUnitTicks(bottomSeconds, topSeconds, unitToDisplay.seconds, timelineHeight, tickMinSpacing);
     }
 
     const pixelsPerUnit = (unitToDisplay.seconds / visibleRange) * timelineHeight;
 
     // Always draw ticks if we have them, regardless of spacing
     if (ticksToRender.length > 0) {
+      // Calculate actual spacing between rendered ticks
+      let pixelsPerTick = 0;
+      if (ticksToRender.length >= 2) {
+        const y1 = yScale(ticksToRender[0]);
+        const y2 = yScale(ticksToRender[1]);
+        pixelsPerTick = Math.abs(y2 - y1);
+      }
+
       for (const seconds of ticksToRender) {
         // Skip ticks outside the valid timeline range (before Big Bang or after Future Horizon)
         if (seconds < START_TIME || seconds > FUTURE_HORIZON_TIME) continue;
 
         const y = yScale(seconds);
-        if (y < timelineTop - 50 || y > timelineTop + timelineHeight + 50) continue;
+        if (y < timelineTop - 500 || y > timelineTop + timelineHeight + 500) continue;
 
         // Apply reduced opacity for ticks in the future zone (between Now and Future Horizon)
         const isInFutureZone = seconds > realNowSeconds && seconds < FUTURE_HORIZON_TIME;
@@ -290,28 +323,9 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
         drawTick(ctx, y, timelineX);
 
-        // For year precision, only label years divisible by 10
-        let shouldDrawLabel = false;
-        if (unitToDisplay.precision === 'year') {
-          try {
-            const MAX_DATE_MS = 8.64e15;
-            const tickMs = Math.max(-MAX_DATE_MS, Math.min(MAX_DATE_MS, seconds * 1000));
-            const tickDate = new Date(tickMs);
-            if (!isNaN(tickDate.getTime())) {
-              const year = tickDate.getUTCFullYear();
-              shouldDrawLabel = year % 10 === 0;
-            }
-          } catch {
-            // Don't draw label
-          }
-        } else {
-          shouldDrawLabel = pixelsPerUnit > 24;
-        }
-
-        if (shouldDrawLabel) {
-          const label = formatDateLabel(seconds, unitToDisplay.precision, unitToDisplay.unit);
-          drawTickLabel(ctx, label, timelineX - 5, y);
-        }
+        // Draw labels on every tick since spacing is already managed by tick generation
+        const label = formatDateLabel(seconds, unitToDisplay.precision, unitToDisplay.unit, unitToDisplay.quantity);
+        drawTickLabel(ctx, label, timelineX - 5, y);
 
         ctx.globalAlpha = 1; // Reset opacity
       }
@@ -335,15 +349,15 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     if (isAtStartBoundary) {
       bottomLabel = '"Before" Time';
     } else {
-      // Use same formatting as ticks for bottom (earliest visible time)
-      bottomLabel = formatDateLabel(visibleBottomTime, unitToDisplay.precision, unitToDisplay.unit);
+      // Use extremity formatting for bottom (earliest visible time) - shows year month day on one line
+      bottomLabel = formatExtremityDateLabel(visibleBottomTime, unitToDisplay.precision, unitToDisplay.unit);
     }
 
     if (isAtEndBoundary) {
       topLabel = 'Far Future';
     } else {
-      // Use same formatting as ticks for top (latest visible time)
-      topLabel = formatDateLabel(visibleTopTime, unitToDisplay.precision, unitToDisplay.unit);
+      // Use extremity formatting for top (latest visible time) - shows year month day on one line
+      topLabel = formatExtremityDateLabel(visibleTopTime, unitToDisplay.precision, unitToDisplay.unit);
     }
 
     // Draw event markers and images
@@ -430,37 +444,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
       drawRelationshipArc(ctx, rel.startY, rel.endY, timelineX, rel.color, dimensions, rel.timeRangeSeconds, visibleTimeRangeSeconds, index);
     });
 
-    // Draw event images
-    eventPositions.forEach(({ event, y }) => {
-      const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
-      // Skip images outside valid timeline range
-      if (unixSeconds < START_TIME || unixSeconds > FUTURE_HORIZON_TIME) return;
-
-      if (y < -150 || y > dimensions.height + 150) return;
-      if (!displayableImageEvents.has(event.id)) return;
-
-      const imageUrl = getEventImageUrl(event);
-      if (!imageUrl) return;
-
-      let img = imageCache.current.get(imageUrl);
-
-      if (!img) {
-        const newImg = new Image();
-        newImg.crossOrigin = 'anonymous';
-        newImg.onload = () => {
-          imageCache.current.set(imageUrl, newImg);
-          setImagesLoaded(prev => prev + 1);
-        };
-        newImg.onerror = () => {
-          console.warn(`Failed to load image: ${imageUrl}`);
-        };
-        newImg.src = imageUrl;
-      } else {
-        // Always display images at the same 100px size for consistency with HTML cards
-        const DISPLAY_SIZE = 100;
-        drawEventImage(ctx, img, y, timelineX, DISPLAY_SIZE);
-      }
-    });
+    // Images are now rendered in HTML cards in EventPanel instead of canvas
 
     // Draw arrow pointing up at NOW on the timeline (same color as timeline, peak at nowY)
     const arrowSize = 10.67; // 16 / 1.5 for 1.5x smaller
@@ -546,6 +530,27 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
           const clickX = upEvent.clientX - rect.left;
           const clickY = upEvent.clientY - rect.top;
           const timelineX = canvas.clientWidth / 2 + 35;
+          const isShiftClick = upEvent.shiftKey;
+
+          console.log('Click detected:', { clickX, clickY, timelineX, canvasWidth: canvas.clientWidth, canvasHeight: canvas.clientHeight, modalOpen, isShiftClick });
+
+          // Calculate unix_seconds for ANY click on the timeline for debug purposes
+          const margin = 0;
+          const timelineTop = margin;
+          const timelineHeight = canvas.clientHeight - margin * 2;
+          const START_TIME = -435494878264400000;
+          const END_TIME = 435457000000000000;
+          const calculatedUnixSeconds = END_TIME - ((clickY - timelineTop - transform.y) / (timelineHeight * transform.k)) * (END_TIME - START_TIME);
+          console.log('Unix seconds for this click would be:', calculatedUnixSeconds, { clickY, timelineTop, transform, timelineHeight });
+
+          // Check if shift-click on timeline to create new event
+          const distFromTimeline = Math.abs(clickX - timelineX);
+          if (isShiftClick && onShiftClick && distFromTimeline < 40) {
+            const unixSeconds = END_TIME - ((clickY - timelineTop - transform.y) / (timelineHeight * transform.k)) * (END_TIME - START_TIME);
+            console.log('SHIFT-CLICK: Creating new event at unix_seconds:', unixSeconds);
+            onShiftClick(unixSeconds);
+            return;
+          }
 
           // Check if click is near any event marker or image
           const eventRadius = 10;
@@ -584,7 +589,9 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
           }
 
           // If modal is open and click is on the timeline (not on an event), call onCanvasClick
-          if (modalOpen && onCanvasClick && Math.abs(clickX - timelineX) < 40) {
+          console.log('Checking timeline click:', { modalOpen, onCanvasClick: !!onCanvasClick, distFromTimeline, threshold: 40, passes: distFromTimeline < 40 });
+
+          if (modalOpen && onCanvasClick && distFromTimeline < 40) {
             // Convert pixel Y coordinate to unix_seconds
             const margin = 0;
             const timelineTop = margin;
@@ -597,7 +604,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
             // Solving for unixSeconds:
             // unixSeconds = END_TIME - ((eventY - timelineTop - y) / (timelineHeight * k)) * (END_TIME - START_TIME)
             const unixSeconds = END_TIME - ((clickY - timelineTop - transform.y) / (timelineHeight * transform.k)) * (END_TIME - START_TIME);
-            console.log('Timeline click detected:', { clickX, timelineX, clickY, unixSeconds, modalOpen, transform, timelineHeight });
+            console.log('CALLING onCanvasClick with:', unixSeconds);
             onCanvasClick(unixSeconds);
           }
         }
@@ -611,13 +618,14 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     canvas.addEventListener('mousedown', handleMouseDown);
 
     return () => {
-      canvas.removeEventListener('wheel', handleWheel);
+      canvas.removeEventListener('wheel', handleWheel, { passive: false });
       canvas.removeEventListener('mousedown', handleMouseDown);
     };
-  }, [START_TIME, END_TIME, FUTURE_HORIZON_TIME]);
+  }, [START_TIME, END_TIME, FUTURE_HORIZON_TIME, modalOpen, onCanvasClick, onShiftClick, events]);
+
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-gray-900">
+    <div ref={containerRef} className="w-full h-full bg-gray-900 relative">
       <canvas
         ref={canvasRef}
         className="block w-full h-full cursor-crosshair"

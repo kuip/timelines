@@ -21,6 +21,7 @@ type Event struct {
 	Title       string  `json:"title" db:"title"`
 	Description *string `json:"description,omitempty" db:"description"`
 	Category    *string `json:"category,omitempty" db:"category"`
+	ImageURL    *string `json:"image_url,omitempty" db:"image_url"`
 
 	ImportanceScore int `json:"importance_score" db:"importance_score"`
 
@@ -42,6 +43,7 @@ type CreateEventRequest struct {
 	Title            string                `json:"title" binding:"required,max=500"`
 	Description      *string               `json:"description,omitempty"`
 	Category         *string               `json:"category,omitempty"`
+	ImageURL         *string               `json:"image_url,omitempty"`
 }
 
 // UpdateEventRequest represents the request to update an event
@@ -53,6 +55,7 @@ type UpdateEventRequest struct {
 	Title            *string               `json:"title,omitempty" binding:"omitempty,max=500"`
 	Description      *string               `json:"description,omitempty"`
 	Category         *string               `json:"category,omitempty"`
+	ImageURL         *string               `json:"image_url,omitempty"`
 }
 
 // EventQueryParams represents query parameters for listing events

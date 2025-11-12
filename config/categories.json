@@ -1,0 +1,604 @@
+{
+  "categories": [
+    {
+      "id": "cosmology",
+      "name": "Cosmology & Astrophysics",
+      "description": "Universe, stars, galaxies",
+      "color": "#1a1a2e",
+      "icon": "🌌",
+      "children": [
+        {
+          "id": "cosmic_formation",
+          "name": "Cosmic Formation",
+          "description": "Big Bang, universe expansion, early cosmos",
+          "color": "#16213e"
+        },
+        {
+          "id": "star_formation",
+          "name": "Star Formation",
+          "description": "Stars, supernovae, stellar evolution",
+          "color": "#0f3460"
+        },
+        {
+          "id": "galaxy_formation",
+          "name": "Galaxy Formation",
+          "description": "Galaxies, galactic structures, collisions",
+          "color": "#533483"
+        },
+        {
+          "id": "exoplanet",
+          "name": "Exoplanet Discovery",
+          "description": "Exoplanet discovery, habitable zones",
+          "color": "#9d4edd"
+        }
+      ]
+    },
+    {
+      "id": "planetary_science",
+      "name": "Planetary Science & Geology",
+      "description": "Earth, planets, rocks, minerals",
+      "color": "#8b5a3c",
+      "icon": "🌍",
+      "children": [
+        {
+          "id": "planetary_formation",
+          "name": "Planetary Formation",
+          "description": "Solar system birth, planetary formation",
+          "color": "#a0826d"
+        },
+        {
+          "id": "earth_formation",
+          "name": "Earth Formation",
+          "description": "Earth's formation, early atmosphere",
+          "color": "#9d7568"
+        },
+        {
+          "id": "plate_tectonics",
+          "name": "Plate Tectonics",
+          "description": "Plate movement, seafloor spreading, continents",
+          "color": "#c9a97a"
+        },
+        {
+          "id": "mineral_geology",
+          "name": "Mineral & Geology",
+          "description": "Mineral discovery, ore formation",
+          "color": "#d4a574"
+        },
+        {
+          "id": "volcano",
+          "name": "Volcanic Activity",
+          "description": "Volcanic eruptions, impact events",
+          "color": "#d97706"
+        },
+        {
+          "id": "earthquake",
+          "name": "Seismic Events",
+          "description": "Earthquakes, tectonic activity",
+          "color": "#dc2626"
+        },
+        {
+          "id": "climate_paleoclimate",
+          "name": "Paleoclimate",
+          "description": "Ice ages, ancient climate shifts",
+          "color": "#60a5fa"
+        }
+      ]
+    },
+    {
+      "id": "life_evolution",
+      "name": "Evolution & Paleontology",
+      "description": "Life, evolution, species",
+      "color": "#065f46",
+      "icon": "🦕",
+      "children": [
+        {
+          "id": "evolution_theory",
+          "name": "Evolution Theory",
+          "description": "Darwinism, evolutionary concepts",
+          "color": "#10b981"
+        },
+        {
+          "id": "species_emergence",
+          "name": "Species Emergence",
+          "description": "Speciation events, new species",
+          "color": "#34d399"
+        },
+        {
+          "id": "extinction_event",
+          "name": "Extinction Events",
+          "description": "Mass extinctions, species loss",
+          "color": "#6ee7b7"
+        },
+        {
+          "id": "fossil_record",
+          "name": "Fossil Record",
+          "description": "Fossil discoveries, paleontology",
+          "color": "#a7f3d0"
+        },
+        {
+          "id": "human_evolution",
+          "name": "Human Evolution",
+          "description": "Hominids, Homo sapiens, ancestors",
+          "color": "#d1fae5"
+        }
+      ]
+    },
+    {
+      "id": "medicine_biology",
+      "name": "Medicine & Biological Sciences",
+      "description": "Health, disease, genetics, physiology",
+      "color": "#7c2d12",
+      "icon": "💉",
+      "children": [
+        {
+          "id": "disease_epidemic",
+          "name": "Disease & Epidemics",
+          "description": "Plagues, pandemics, disease outbreaks",
+          "color": "#ea580c"
+        },
+        {
+          "id": "medicine_breakthrough",
+          "name": "Medical Breakthroughs",
+          "description": "Surgery, vaccines, antibiotics, drugs",
+          "color": "#fb923c"
+        },
+        {
+          "id": "genetics_dna",
+          "name": "Genetics & DNA",
+          "description": "DNA discovery, genetic mapping, CRISPR",
+          "color": "#fdba74"
+        },
+        {
+          "id": "neuroscience",
+          "name": "Neuroscience",
+          "description": "Brain discoveries, neurology research",
+          "color": "#fed7aa"
+        },
+        {
+          "id": "immunology",
+          "name": "Immunology",
+          "description": "Immune system discoveries",
+          "color": "#fecaca"
+        },
+        {
+          "id": "physiology",
+          "name": "Physiology",
+          "description": "Organ function, anatomy discoveries",
+          "color": "#fca5a5"
+        }
+      ]
+    },
+    {
+      "id": "technology",
+      "name": "Technology & Innovation",
+      "description": "Tools, machines, infrastructure",
+      "color": "#1e3a8a",
+      "icon": "⚙️",
+      "children": [
+        {
+          "id": "transportation",
+          "name": "Transportation",
+          "description": "Wheels, ships, trains, cars, aviation, rockets",
+          "color": "#3b82f6"
+        },
+        {
+          "id": "communication",
+          "name": "Communication",
+          "description": "Writing, printing, telegraph, telephone, internet",
+          "color": "#60a5fa"
+        },
+        {
+          "id": "energy",
+          "name": "Energy",
+          "description": "Fire, coal, steam, electricity, nuclear, renewable",
+          "color": "#93c5fd"
+        },
+        {
+          "id": "computing",
+          "name": "Computing",
+          "description": "Computers, software, AI, semiconductors",
+          "color": "#bfdbfe"
+        },
+        {
+          "id": "material_science",
+          "name": "Materials Science",
+          "description": "Metals, plastics, composites, nanotechnology",
+          "color": "#dbeafe"
+        },
+        {
+          "id": "construction",
+          "name": "Construction & Infrastructure",
+          "description": "Buildings, bridges, roads, infrastructure",
+          "color": "#eff6ff"
+        }
+      ]
+    },
+    {
+      "id": "science",
+      "name": "Science & Physics",
+      "description": "Discoveries, theories, observations",
+      "color": "#4c0519",
+      "icon": "🔬",
+      "children": [
+        {
+          "id": "physics_discovery",
+          "name": "Physics",
+          "description": "Gravity, relativity, quantum mechanics",
+          "color": "#ec4899"
+        },
+        {
+          "id": "chemistry_discovery",
+          "name": "Chemistry",
+          "description": "Elements, periodic table, chemical bonds",
+          "color": "#f472b6"
+        },
+        {
+          "id": "astronomy_observation",
+          "name": "Astronomy",
+          "description": "Telescopes, celestial mapping, observations",
+          "color": "#fbcfe8"
+        },
+        {
+          "id": "mathematics",
+          "name": "Mathematics",
+          "description": "Mathematical concepts, algorithms",
+          "color": "#fce7f3"
+        }
+      ]
+    },
+    {
+      "id": "agriculture",
+      "name": "Agriculture & Food",
+      "description": "Farming, crops, food",
+      "color": "#713f12",
+      "icon": "🌾",
+      "children": [
+        {
+          "id": "agriculture_domestication",
+          "name": "Agriculture & Domestication",
+          "description": "Farming, crop domestication, selective breeding",
+          "color": "#b45309"
+        },
+        {
+          "id": "food_discovery",
+          "name": "Food & Trade",
+          "description": "Spice trade, new crops, cooking innovations",
+          "color": "#d97706"
+        }
+      ]
+    },
+    {
+      "id": "conflict",
+      "name": "War & Conflict",
+      "description": "Wars, battles, violence",
+      "color": "#7f1d1d",
+      "icon": "⚔️",
+      "children": [
+        {
+          "id": "war_major",
+          "name": "Major Wars",
+          "description": "World wars, major conflicts, battles",
+          "color": "#dc2626"
+        },
+        {
+          "id": "war_regional",
+          "name": "Regional Conflicts",
+          "description": "Regional conflicts, civil wars",
+          "color": "#ef4444"
+        },
+        {
+          "id": "genocide",
+          "name": "Genocide & Atrocities",
+          "description": "Genocides, human rights atrocities",
+          "color": "#f87171"
+        },
+        {
+          "id": "terrorism",
+          "name": "Terrorism",
+          "description": "Terrorist attacks, terrorism emergence",
+          "color": "#fca5a5"
+        }
+      ]
+    },
+    {
+      "id": "politics",
+      "name": "Politics & Governance",
+      "description": "Governments, laws, diplomacy",
+      "color": "#1f2937",
+      "icon": "🏛️",
+      "children": [
+        {
+          "id": "government_system",
+          "name": "Government Systems",
+          "description": "Democracy, monarchy, dictatorship emergence",
+          "color": "#374151"
+        },
+        {
+          "id": "revolution_uprising",
+          "name": "Revolutions & Uprisings",
+          "description": "Revolutions, uprisings, coups",
+          "color": "#6b7280"
+        },
+        {
+          "id": "treaty_diplomacy",
+          "name": "Treaties & Diplomacy",
+          "description": "Treaties, alliances, international agreements",
+          "color": "#9ca3af"
+        },
+        {
+          "id": "independence",
+          "name": "Independence & Decolonization",
+          "description": "National independence, decolonization",
+          "color": "#d1d5db"
+        },
+        {
+          "id": "law_justice",
+          "name": "Law & Justice",
+          "description": "Laws, courts, justice system emergence",
+          "color": "#f3f4f6"
+        }
+      ]
+    },
+    {
+      "id": "economics",
+      "name": "Economics & Trade",
+      "description": "Markets, trade, finance, industry",
+      "color": "#365314",
+      "icon": "💰",
+      "children": [
+        {
+          "id": "trade_commerce",
+          "name": "Trade & Commerce",
+          "description": "Trade routes, commerce, markets",
+          "color": "#65a30d"
+        },
+        {
+          "id": "currency_banking",
+          "name": "Currency & Banking",
+          "description": "Currency, banks, financial systems",
+          "color": "#84cc16"
+        },
+        {
+          "id": "industrial_revolution",
+          "name": "Industrial Revolution",
+          "description": "Industry, manufacturing, factories",
+          "color": "#bfef45"
+        },
+        {
+          "id": "economic_crisis",
+          "name": "Economic Crises",
+          "description": "Recessions, depressions, market crashes",
+          "color": "#dcfce7"
+        }
+      ]
+    },
+    {
+      "id": "social",
+      "name": "Social & Rights Movements",
+      "description": "Society, rights, equality",
+      "color": "#831843",
+      "icon": "👥",
+      "children": [
+        {
+          "id": "rights_movement",
+          "name": "Rights Movements",
+          "description": "Civil rights, human rights, equality movements",
+          "color": "#be185d"
+        },
+        {
+          "id": "labor_movement",
+          "name": "Labor Movement",
+          "description": "Labor rights, unions, workers' movements",
+          "color": "#ec4899"
+        },
+        {
+          "id": "migration",
+          "name": "Migration & Diaspora",
+          "description": "Mass migration, diaspora, displacement",
+          "color": "#f472b6"
+        },
+        {
+          "id": "urbanization",
+          "name": "Urbanization",
+          "description": "City growth, urban development",
+          "color": "#fbcfe8"
+        },
+        {
+          "id": "education",
+          "name": "Education",
+          "description": "Educational systems, universities, literacy",
+          "color": "#fce7f3"
+        }
+      ]
+    },
+    {
+      "id": "culture",
+      "name": "Culture & Arts",
+      "description": "Art, music, literature, philosophy",
+      "color": "#4c1d95",
+      "icon": "🎨",
+      "children": [
+        {
+          "id": "art_movement",
+          "name": "Art Movements",
+          "description": "Art styles, Renaissance, modernism",
+          "color": "#6d28d9"
+        },
+        {
+          "id": "music_genre",
+          "name": "Music & Genres",
+          "description": "Music styles, musical evolution",
+          "color": "#7c3aed"
+        },
+        {
+          "id": "literature",
+          "name": "Literature",
+          "description": "Literary movements, famous works",
+          "color": "#8b5cf6"
+        },
+        {
+          "id": "philosophy",
+          "name": "Philosophy",
+          "description": "Philosophical schools, major thinkers",
+          "color": "#a78bfa"
+        },
+        {
+          "id": "religion_theology",
+          "name": "Religion & Theology",
+          "description": "Religious movements, theological concepts",
+          "color": "#c4b5fd"
+        },
+        {
+          "id": "architecture_style",
+          "name": "Architecture",
+          "description": "Architectural movements, famous structures",
+          "color": "#ddd6fe"
+        }
+      ]
+    },
+    {
+      "id": "entertainment",
+      "name": "Entertainment & Media",
+      "description": "Cinema, television, gaming, pop culture",
+      "color": "#991b1b",
+      "icon": "🎬",
+      "children": [
+        {
+          "id": "cinema_film",
+          "name": "Cinema & Film",
+          "description": "Film invention, cinema movements, iconic films",
+          "color": "#dc2626"
+        },
+        {
+          "id": "theater",
+          "name": "Theater",
+          "description": "Theater history, dramatic movements",
+          "color": "#ef4444"
+        },
+        {
+          "id": "television",
+          "name": "Television",
+          "description": "TV invention, broadcasting, iconic shows",
+          "color": "#f87171"
+        },
+        {
+          "id": "radio",
+          "name": "Radio",
+          "description": "Radio invention, broadcasting, radio culture",
+          "color": "#fca5a5"
+        },
+        {
+          "id": "video_games",
+          "name": "Video Games",
+          "description": "Gaming history, game milestones",
+          "color": "#fecaca"
+        },
+        {
+          "id": "pop_culture",
+          "name": "Pop Culture",
+          "description": "Celebrities, trends, cultural phenomena",
+          "color": "#fee2e2"
+        }
+      ]
+    },
+    {
+      "id": "sports",
+      "name": "Sports & Recreation",
+      "description": "Sports, athletics, games",
+      "color": "#164e63",
+      "icon": "⚽",
+      "children": [
+        {
+          "id": "olympics",
+          "name": "Olympics",
+          "description": "Olympic games, records, memorable moments",
+          "color": "#06b6d4"
+        },
+        {
+          "id": "professional_sports",
+          "name": "Professional Sports",
+          "description": "Sports leagues, championships, iconic events",
+          "color": "#22d3ee"
+        },
+        {
+          "id": "sports_record",
+          "name": "Sports Records",
+          "description": "World records, athletic achievements",
+          "color": "#67e8f9"
+        }
+      ]
+    },
+    {
+      "id": "environment",
+      "name": "Environment & Ecology",
+      "description": "Conservation, climate, ecology",
+      "color": "#14532d",
+      "icon": "🌱",
+      "children": [
+        {
+          "id": "conservation",
+          "name": "Conservation",
+          "description": "Wildlife protection, reserves, endangered species",
+          "color": "#16a34a"
+        },
+        {
+          "id": "pollution",
+          "name": "Pollution",
+          "description": "Pollution events, environmental damage",
+          "color": "#4ade80"
+        },
+        {
+          "id": "deforestation",
+          "name": "Deforestation",
+          "description": "Forest loss, habitat destruction",
+          "color": "#86efac"
+        },
+        {
+          "id": "climate_change",
+          "name": "Climate Change",
+          "description": "Global warming, climate crisis",
+          "color": "#bbf7d0"
+        },
+        {
+          "id": "environmental_protection",
+          "name": "Environmental Protection",
+          "description": "Environmental laws, green movement",
+          "color": "#dcfce7"
+        }
+      ]
+    },
+    {
+      "id": "space",
+      "name": "Space Exploration",
+      "description": "Satellites, rockets, space missions",
+      "color": "#0c4a6e",
+      "icon": "🚀",
+      "children": [
+        {
+          "id": "space_exploration",
+          "name": "Space Programs",
+          "description": "Satellites, rockets, space missions, space programs",
+          "color": "#0284c7"
+        },
+        {
+          "id": "moon_landing",
+          "name": "Moon Exploration",
+          "description": "Moon missions, lunar exploration, moon bases",
+          "color": "#38bdf8"
+        },
+        {
+          "id": "mars_exploration",
+          "name": "Mars Exploration",
+          "description": "Mars missions, planetary exploration rovers",
+          "color": "#7dd3fc"
+        },
+        {
+          "id": "space_telescope",
+          "name": "Space Telescopes",
+          "description": "Space observatories, Hubble, JWST",
+          "color": "#bae6fd"
+        }
+      ]
+    }
+  ]
+}

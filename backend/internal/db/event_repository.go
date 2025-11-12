@@ -21,19 +21,26 @@ func NewEventRepository(db *DB) *EventRepository {
 
 // Create inserts a new event
 func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) (*models.Event, error) {
+	// Convert unix_seconds to timeline_seconds
+	// Formula: timeline_seconds = unix_seconds + 435494878264400000 (Big Bang offset)
+	const BIG_BANG_TO_EPOCH int64 = 435494878264400000
+	timelineSecondsDec, _ := decimal.NewFromString(fmt.Sprintf("%d", req.UnixSeconds + BIG_BANG_TO_EPOCH))
+	timelineSeconds := timelineSecondsDec
+
 	query := `
 		INSERT INTO events (
-			unix_seconds, unix_nanos, precision_level, uncertainty_range,
-			title, description, category, created_by_user_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
+			title, description, category, created_by_user_id, image_url
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
 		          title, description, category, importance_score, related_event_id,
-		          created_at, updated_at, created_by_user_id
+		          created_at, updated_at, created_by_user_id, image_url
 	`
 
 	event := &models.Event{}
 	err := r.db.QueryRow(
 		query,
+		timelineSeconds,
 		req.UnixSeconds,
 		req.UnixNanos,
 		req.PrecisionLevel,
@@ -42,6 +49,7 @@ func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) 
 		req.Description,
 		req.Category,
 		userID,
+		req.ImageURL,
 	).Scan(
 		&event.ID,
 		&event.TimelineSeconds,
@@ -57,6 +65,7 @@ func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) 
 		&event.CreatedAt,
 		&event.UpdatedAt,
 		&event.CreatedByUserID,
+		&event.ImageURL,
 	)
 
 	if err != nil {
@@ -71,7 +80,7 @@ func (r *EventRepository) GetByID(id string) (*models.Event, error) {
 	query := `
 		SELECT id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
 		       title, description, category, importance_score, related_event_id,
-		       created_at, updated_at, created_by_user_id
+		       created_at, updated_at, created_by_user_id, image_url
 		FROM events
 		WHERE id = $1
 	`
@@ -92,6 +101,7 @@ func (r *EventRepository) GetByID(id string) (*models.Event, error) {
 		&event.CreatedAt,
 		&event.UpdatedAt,
 		&event.CreatedByUserID,
+		&event.ImageURL,
 	)
 
 	if err == sql.ErrNoRows {
@@ -110,7 +120,7 @@ func (r *EventRepository) List(params models.EventQueryParams) ([]models.Event, 
 	query := `
 		SELECT id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
 		       title, description, category, importance_score, related_event_id,
-		       created_at, updated_at, created_by_user_id
+		       created_at, updated_at, created_by_user_id, image_url
 		FROM public.events
 		WHERE 1=1
 	`
@@ -194,6 +204,7 @@ func (r *EventRepository) List(params models.EventQueryParams) ([]models.Event, 
 			&event.CreatedAt,
 			&event.UpdatedAt,
 			&event.CreatedByUserID,
+			&event.ImageURL,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan event: %w", err)
@@ -253,6 +264,12 @@ func (r *EventRepository) Update(id string, req models.UpdateEventRequest) (*mod
 		argCount++
 	}
 
+	if req.ImageURL != nil {
+		updates = append(updates, fmt.Sprintf("image_url = $%d", argCount))
+		args = append(args, req.ImageURL)
+		argCount++
+	}
+
 	if len(updates) == 0 {
 		return r.GetByID(id)
 	}
@@ -266,7 +283,7 @@ func (r *EventRepository) Update(id string, req models.UpdateEventRequest) (*mod
 		WHERE id = $%d
 		RETURNING id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
 		          title, description, category, importance_score, related_event_id,
-		          created_at, updated_at, created_by_user_id
+		          created_at, updated_at, created_by_user_id, image_url
 	`, strings.Join(updates, ", "), argCount)
 
 	event := &models.Event{}
@@ -285,6 +302,7 @@ func (r *EventRepository) Update(id string, req models.UpdateEventRequest) (*mod
 		&event.CreatedAt,
 		&event.UpdatedAt,
 		&event.CreatedByUserID,
+		&event.ImageURL,
 	)
 
 	if err == sql.ErrNoRows {
