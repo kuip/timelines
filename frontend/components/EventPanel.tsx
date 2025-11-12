@@ -460,16 +460,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
               );
             })}
           </div>
-        ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <div className="text-gray-600 text-lg mb-2">← No events visible at this zoom level</div>
-              <div className="text-gray-500 text-sm">
-                {events.length} total events loaded
-              </div>
-            </div>
-          </div>
-        )}
+        ) : null}
       </div>
 
     </div>
