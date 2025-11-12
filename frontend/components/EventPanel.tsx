@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { EventResponse } from '@/types';
 import { calculateEventY, getDisplayableEvents } from '@/lib/coordinateHelper';
 import { getEventImageUrl } from '@/lib/imageHelper';
@@ -223,7 +223,8 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
 
   // Determine which visible events can be displayed with their titles (collision detection)
   // Use the shared collision detection function for consistency with canvas images
-  const displayableEvents = (() => {
+  // Memoize to prevent creating new array references on every render
+  const displayableEvents = useMemo(() => {
     const START_TIME = -435494878264400000;
 
     // Filter visible events to exclude those beyond Future Horizon
@@ -255,7 +256,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
 
     const displayableIds = getDisplayableEvents(positions, dimensions.height);
     return positions.filter(({ event }) => displayableIds.has(event.id)).map(({ event }) => event);
-  })();
+  }, [visibleEvents, getEventY, currentTime, dimensions.height, FUTURE_HORIZON_TIME, nowEvent, futureHorizonEvent]);
 
   return (
     <div
