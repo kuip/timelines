@@ -174,6 +174,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
   // Determine which visible events can be displayed with their titles (collision detection)
   // Use the shared collision detection function for consistency with canvas images
   // Memoize to prevent creating new array references on every render
+  // Key: Compare event IDs, not array reference, to avoid recomputing on every pan/zoom
   const displayableEvents = useMemo(() => {
     const START_TIME = -435494878264400000;
 
@@ -206,7 +207,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
 
     const displayableIds = getDisplayableEvents(positions, dimensions.height);
     return positions.filter(({ event }) => displayableIds.has(event.id)).map(({ event }) => event);
-  }, [visibleEvents, dimensions.height]);
+  }, [visibleEvents.length, dimensions.height]);
 
   // Notify parent of displayed events (for GeoMap)
   // Use memoized displayableEvents to avoid unnecessary calls
