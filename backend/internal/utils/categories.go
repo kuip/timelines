@@ -12,6 +12,7 @@ type CategoryMetadata struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Color       string `json:"color"`
+	Icon        string `json:"icon,omitempty"`
 }
 
 type CategoryGroup struct {
@@ -19,6 +20,7 @@ type CategoryGroup struct {
 	Name        string               `json:"name"`
 	Description string               `json:"description"`
 	Color       string               `json:"color"`
+	Icon        string               `json:"icon,omitempty"`
 	Children    []CategoryMetadata   `json:"children"`
 }
 
@@ -27,6 +29,7 @@ type CategoriesConfig struct {
 }
 
 var validCategories map[string]CategoryMetadata
+var categoriesTree []CategoryGroup
 
 func init() {
 	validCategories = make(map[string]CategoryMetadata)
@@ -56,7 +59,10 @@ func loadCategories() {
 		return
 	}
 
-	// Flatten categories
+	// Store full tree structure
+	categoriesTree = config.Categories
+
+	// Flatten categories for validation lookups
 	for _, group := range config.Categories {
 		for _, child := range group.Children {
 			validCategories[child.ID] = child
@@ -94,4 +100,9 @@ func GetCategoryColor(categoryID string) string {
 // GetAllCategories returns all valid categories
 func GetAllCategories() map[string]CategoryMetadata {
 	return validCategories
+}
+
+// GetCategoriesTree returns the full hierarchical category structure
+func GetCategoriesTree() []CategoryGroup {
+	return categoriesTree
 }

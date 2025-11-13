@@ -72,6 +72,12 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
 
         for (const eventId of newEventIds) {
           try {
+            // Skip special events that don't have database entries
+            if (eventId === 'now' || eventId === 'future-horizon') {
+              fetchedEventIdsRef.current.add(eventId);
+              continue;
+            }
+
             const response = await fetch(`${apiUrl}/api/events/${eventId}/locations`);
             if (!response.ok) continue;
 
@@ -118,7 +124,14 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
         const visibleEventIds = new Set(eventIds);
         setLocations(prev => {
           const filteredPrev = prev.filter(loc => visibleEventIds.has(loc.event_id));
-          return [...filteredPrev, ...allLocations];
+
+          // Deduplicate by location ID to avoid duplicate placemarks
+          const seenLocationIds = new Set(filteredPrev.map(loc => loc.id));
+          const newUniqueLocations = allLocations.filter(loc => !seenLocationIds.has(loc.id));
+
+          const combined = [...filteredPrev, ...newUniqueLocations];
+          // Ensure we only have locations for visible events
+          return combined.filter(loc => visibleEventIds.has(loc.event_id));
         });
         setError(null);
       } catch (err) {
@@ -243,13 +256,143 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
           if (geometry.type === 'Point') {
             const [lng, lat] = geometry.coordinates;
 
+            // Find the event to get category and image
+            const event = events.find(e => e.id === location.event_id);
+
+            // Get category color (default to blue if not found)
+            let categoryColor = '#3b82f6';
+            if (event?.category) {
+              // Map categories to their colors from the categories.json
+              const categoryColors: Record<string, string> = {
+                'cosmic_formation': '#16213e',
+                'star_formation': '#0f3460',
+                'galaxy_formation': '#533483',
+                'exoplanet': '#9d4edd',
+                'planetary_formation': '#a0826d',
+                'earth_formation': '#9d7568',
+                'plate_tectonics': '#c9a97a',
+                'mineral_geology': '#d4a574',
+                'volcano': '#d97706',
+                'earthquake': '#dc2626',
+                'climate_paleoclimate': '#60a5fa',
+                'evolution_theory': '#10b981',
+                'species_emergence': '#34d399',
+                'extinction_event': '#6ee7b7',
+                'fossil_record': '#a7f3d0',
+                'human_evolution': '#d1fae5',
+                'disease_epidemic': '#ea580c',
+                'medicine_breakthrough': '#fb923c',
+                'genetics_dna': '#fdba74',
+                'neuroscience': '#fed7aa',
+                'immunology': '#fecaca',
+                'physiology': '#fca5a5',
+                'transportation': '#3b82f6',
+                'communication': '#60a5fa',
+                'energy': '#93c5fd',
+                'computing': '#bfdbfe',
+                'material_science': '#dbeafe',
+                'construction': '#eff6ff',
+                'physics_discovery': '#ec4899',
+                'chemistry_discovery': '#f472b6',
+                'astronomy_observation': '#fbcfe8',
+                'mathematics': '#fce7f3',
+                'agriculture_domestication': '#b45309',
+                'food_discovery': '#d97706',
+                'war_major': '#dc2626',
+                'war_regional': '#ef4444',
+                'genocide': '#f87171',
+                'terrorism': '#fca5a5',
+                'government_system': '#374151',
+                'revolution_uprising': '#6b7280',
+                'treaty_diplomacy': '#9ca3af',
+                'independence': '#d1d5db',
+                'law_justice': '#f3f4f6',
+                'trade_commerce': '#65a30d',
+                'currency_banking': '#84cc16',
+                'industrial_revolution': '#bfef45',
+                'economic_crisis': '#dcfce7',
+                'rights_movement': '#be185d',
+                'labor_movement': '#ec4899',
+                'migration': '#f472b6',
+                'urbanization': '#fbcfe8',
+                'education': '#fce7f3',
+                'art_movement': '#6d28d9',
+                'music_genre': '#7c3aed',
+                'literature': '#8b5cf6',
+                'philosophy': '#a78bfa',
+                'religion_theology': '#c4b5fd',
+                'architecture_style': '#ddd6fe',
+                'cinema_film': '#dc2626',
+                'theater': '#ef4444',
+                'television': '#f87171',
+                'radio': '#fca5a5',
+                'video_games': '#fecaca',
+                'pop_culture': '#fee2e2',
+                'olympics': '#06b6d4',
+                'professional_sports': '#22d3ee',
+                'sports_record': '#67e8f9',
+                'conservation': '#16a34a',
+                'pollution': '#4ade80',
+                'deforestation': '#86efac',
+                'climate_change': '#bbf7d0',
+                'environmental_protection': '#dcfce7',
+                'space_exploration': '#0284c7',
+                'moon_landing': '#38bdf8',
+                'mars_exploration': '#7dd3fc',
+                'space_telescope': '#bae6fd',
+              };
+              categoryColor = categoryColors[event.category] || '#3b82f6';
+            }
+
+            // Create inverted teardrop icon with category color and optional image
+            const createTearDropIcon = (color: string, imageUrl?: string) => {
+              const svgString = imageUrl
+                ? `
+                  <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="25" height="41" viewBox="0 0 25 41">
+                    <defs>
+                      <clipPath id="circle-clip">
+                        <circle cx="12.5" cy="21" r="11"/>
+                      </clipPath>
+                    </defs>
+                    <!-- Exact Leaflet inverted marker path with category color -->
+                    <path d="M12.5,41C12.5,41 0,29 0,22 A 12.5 12.5 0 0 1 12.5 9 A 12.5 12.5 0 0 1 25 22 C 25 29 12.5 41 12.5 41 Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+                    <!-- Image in the circle -->
+                    <image xlink:href="${imageUrl}" x="0.5" y="9.5" width="24" height="24" clip-path="url(#circle-clip)" preserveAspectRatio="xMidYMid slice"/>
+                  </svg>
+                `
+                : `
+                  <svg xmlns="http://www.w3.org/2000/svg" width="25" height="41" viewBox="0 0 25 41">
+                    <!-- Exact Leaflet inverted marker path with category color -->
+                    <path d="M12.5,41C12.5,41 0,29 0,22 A 12.5 12.5 0 0 1 12.5 9 A 12.5 12.5 0 0 1 25 22 C 25 29 12.5 41 12.5 41 Z" fill="${color}" stroke="white" stroke-width="1.5"/>
+                  </svg>
+                `;
+
+              return L.divIcon({
+                html: svgString,
+                iconSize: [25, 41],
+                iconAnchor: [12.5, 41],
+                popupAnchor: [0, -10],
+                className: 'leaflet-marker-teardrop',
+              });
+            };
+
+            const icon = createTearDropIcon(categoryColor, event?.image_url);
             const marker = L.marker([lat, lng], {
               title: location.event_title,
+              icon,
             }).addTo(mapRef.current);
+
+            // Add popup with event info
+            const popupContent = `
+              <div style="font-size: 12px; width: 150px;">
+                <strong>${location.event_title}</strong>
+                <br><small>${event?.formatted_time || ''}</small>
+              </div>
+            `;
+            marker.bindPopup(popupContent);
 
             // Add click handler to open event details modal
             marker.on('click', () => {
-              const event = events.find(e => e.id === location.event_id);
               if (event && onEventClick) {
                 onEventClick(event);
               }

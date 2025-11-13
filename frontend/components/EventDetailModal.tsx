@@ -4,17 +4,61 @@ import React, { useState, useEffect } from 'react';
 import { EventResponse } from '@/types';
 import { eventsApi } from '@/lib/api';
 
-const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
-  cosmic: { bg: '#8b5cf6', text: '#f5e6ff' },
-  geological: { bg: '#f59e0b', text: '#1f2937' },
-  biological: { bg: '#10b981', text: '#f0fdf4' },
-  historical: { bg: '#ef4444', text: '#fef2f2' },
-  political: { bg: '#3b82f6', text: '#eff6ff' },
-  technological: { bg: '#06b6d4', text: '#f0f9fa' },
-  contemporary: { bg: '#ec4899', text: '#fdf2f8' },
-};
+interface CategoryChild {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  icon?: string;
+}
 
-const CATEGORY_OPTIONS = Object.keys(CATEGORY_COLORS);
+interface CategoryGroup {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  icon?: string;
+  children: CategoryChild[];
+}
+
+let CATEGORY_TREE: CategoryGroup[] = [];
+let CATEGORY_MAP: Record<string, CategoryChild> = {};
+
+// Load categories tree from API on client side
+if (typeof window !== 'undefined') {
+  (async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/categories/tree');
+      if (response.ok) {
+        const data = await response.json();
+        CATEGORY_TREE = data.categories;
+        // Build flat map for quick lookups
+        data.categories.forEach((group: CategoryGroup) => {
+          group.children.forEach((child: CategoryChild) => {
+            CATEGORY_MAP[child.id] = child;
+          });
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to load categories tree:', err);
+      // Fallback - load from local public categories.json
+      try {
+        const response = await fetch('/categories.json');
+        if (response.ok) {
+          const data = await response.json();
+          CATEGORY_TREE = data.categories;
+          data.categories.forEach((group: CategoryGroup) => {
+            group.children.forEach((child: CategoryChild) => {
+              CATEGORY_MAP[child.id] = child;
+            });
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to load categories from fallback:', e);
+      }
+    }
+  })();
+}
 
 interface EventDetailModalProps {
   event: EventResponse | null;
@@ -45,6 +89,8 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
+    const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+    const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
     const [formData, setFormData] = useState<FormData>({
       title: '',
       description: '',
@@ -304,24 +350,93 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                     />
                   </div>
 
-                  {/* Category Select */}
+                  {/* Category Select with Tree */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Category
                     </label>
-                    <select
-                      value={formData.category}
-                      onChange={(e) =>
-                        setFormData({ ...formData, category: e.target.value })
-                      }
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
-                    >
-                      {CATEGORY_OPTIONS.map((cat) => (
-                        <option key={cat} value={cat}>
-                          {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      {/* Dropdown trigger button */}
+                      <button
+                        type="button"
+                        onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-left focus:outline-none focus:border-blue-500 flex justify-between items-center"
+                      >
+                        <span>
+                          {formData.category
+                            ? CATEGORY_MAP[formData.category]?.name || formData.category
+                            : 'Select a category...'}
+                        </span>
+                        <span className="text-xs">▼</span>
+                      </button>
+
+                      {/* Dropdown menu with category tree */}
+                      {showCategoryDropdown && CATEGORY_TREE.length > 0 && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-gray-700 border border-gray-600 rounded shadow-lg z-10 max-h-96 overflow-y-auto">
+                          {CATEGORY_TREE.map((group) => (
+                            <div key={group.id}>
+                              {/* Parent category header - collapsible */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setExpandedCategories((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(group.id)) {
+                                      next.delete(group.id);
+                                    } else {
+                                      next.add(group.id);
+                                    }
+                                    return next;
+                                  });
+                                }}
+                                className="w-full px-4 py-2 text-left hover:bg-gray-600 border-b border-gray-600 flex items-center gap-2 text-white font-medium"
+                                style={{ borderLeftColor: group.color, borderLeftWidth: '3px' }}
+                              >
+                                <span className="text-sm">
+                                  {expandedCategories.has(group.id) ? '▼' : '▶'}
+                                </span>
+                                {group.icon && <span>{group.icon}</span>}
+                                <span>{group.name}</span>
+                              </button>
+
+                              {/* Child categories - shown when expanded */}
+                              {expandedCategories.has(group.id) && (
+                                <div className="bg-gray-800">
+                                  {group.children.map((child) => (
+                                    <button
+                                      key={child.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setFormData({ ...formData, category: child.id });
+                                        setShowCategoryDropdown(false);
+                                      }}
+                                      className={`w-full px-6 py-2 text-left text-sm hover:bg-gray-600 transition ${
+                                        formData.category === child.id
+                                          ? 'bg-blue-900 border-l-2 border-blue-500'
+                                          : 'border-l-2'
+                                      }`}
+                                      style={{
+                                        borderLeftColor: formData.category === child.id ? '#3b82f6' : child.color,
+                                      }}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div>
+                                          <p className="text-white font-medium">{child.name}</p>
+                                          <p className="text-xs text-gray-400">{child.description}</p>
+                                        </div>
+                                        {formData.category === child.id && (
+                                          <span className="text-blue-400 ml-2">✓</span>
+                                        )}
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Description Textarea */}
@@ -474,11 +589,11 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                       <span
                         className="inline-block px-3 py-1 text-sm font-bold rounded"
                         style={{
-                          backgroundColor: CATEGORY_COLORS[currentEvent.category]?.bg || '#3b82f6',
-                          color: CATEGORY_COLORS[currentEvent.category]?.text || '#eff6ff',
+                          backgroundColor: CATEGORY_MAP[currentEvent.category]?.color || '#3b82f6',
+                          color: '#fff',
                         }}
                       >
-                        {currentEvent.category.toUpperCase()}
+                        {CATEGORY_MAP[currentEvent.category]?.name || currentEvent.category}
                       </span>
                     </div>
                   )}

@@ -172,6 +172,12 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
         for (const eventId of newEventIds) {
           try {
+            // Skip special events that don't have database entries
+            if (eventId === 'now' || eventId === 'future-horizon') {
+              fetchedEventIdsRef.current.add(eventId);
+              continue;
+            }
+
             const response = await fetch(`${apiUrl}/api/events/${eventId}/relationships`);
             if (!response.ok) continue;
 

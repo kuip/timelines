@@ -12,8 +12,8 @@ export interface ZoomThreshold {
 
 export const useZoomThresholds = (): ZoomThreshold[] => {
   return useMemo(() => {
-    // Import the JSON directly
-    const thresholds = require('@/config/zoomThresholds.json').zoomThresholds;
+    // Import the JSON directly from public folder
+    const thresholds = require('/public/zoomThresholds.json').zoomThresholds;
     // Sort by k value in descending order (highest k first)
     return thresholds.sort((a: ZoomThreshold, b: ZoomThreshold) => b.k - a.k);
   }, []);

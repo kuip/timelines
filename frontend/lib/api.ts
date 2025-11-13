@@ -8,10 +8,18 @@ const getApiUrl = (): string => {
     return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
   }
 
-  // Client-side: use current host but with port 8080 for backend
-  const host = window.location.hostname;
-  const protocol = window.location.protocol;
-  return `${protocol}//${host}:8080`;
+  // Client-side: prefer environment variable, fallback to config or localhost
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+
+  // Try to load from config file (set at build/runtime)
+  if (typeof window !== 'undefined' && (window as any).__API_CONFIG__) {
+    return (window as any).__API_CONFIG__.api_url;
+  }
+
+  // Default to localhost for development
+  return 'http://localhost:8080';
 };
 
 const API_URL = getApiUrl();

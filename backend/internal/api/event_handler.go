@@ -237,3 +237,11 @@ func (h *EventHandler) GetEventRelationships(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"relationships": relationships})
 }
+
+// GetCategoriesTree handles GET /api/categories/tree
+func (h *EventHandler) GetCategoriesTree(c *gin.Context) {
+	tree := utils.GetCategoriesTree()
+	c.JSON(http.StatusOK, gin.H{
+		"categories": tree,
+	})
+}

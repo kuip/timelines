@@ -251,11 +251,11 @@ export const drawEventImage = (
   img: HTMLImageElement,
   y: number,
   timelineX: number,
-  displaySize: number
+  displaySize: number,
+  padding: number = 2
 ) => {
   const imgX = timelineX + 7;
   const imgY = y - displaySize / 2;
-  const padding = 2;
 
   // Draw background rectangle
   ctx.fillStyle = '#1f2937';

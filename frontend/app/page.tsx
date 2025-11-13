@@ -12,6 +12,14 @@ import { getFutureHorizonTime } from '@/lib/coordinateHelper';
 
 const GeoMap = dynamic(() => import('@/components/GeoMap'), { ssr: false });
 
+interface UIConfig {
+  timelineCanvasWidthPx: number;
+  mapWidthPercent: number;
+  cardHeightPx: number;
+  cardViewportPaddingPx: number;
+  imagePaddingPx: number;
+}
+
 export default function Home() {
   const [events, setEvents] = useState<EventResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,6 +30,13 @@ export default function Home() {
   const [visibleEvents, setVisibleEvents] = useState<EventResponse[]>([]);
   const [displayedCardEvents, setDisplayedCardEvents] = useState<EventResponse[]>([]);
   const [canvasDimensions, setCanvasDimensions] = useState({ width: 200, height: 0 });
+  const [uiConfig, setUiConfig] = useState<UIConfig>({
+    timelineCanvasWidthPx: 200,
+    mapWidthPercent: 45,
+    cardHeightPx: 100,
+    cardViewportPaddingPx: 0,
+    imagePaddingPx: 2,
+  });
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const modalRef = useRef<EventDetailModalHandle>(null);
   const prevCardIdsRef = useRef<string>('');
@@ -31,10 +46,31 @@ export default function Home() {
   const END_TIME = 435457000000000000;
   const FUTURE_HORIZON_TIME = getFutureHorizonTime();
 
-  // Load transform from URL on mount or set initial state with Big Bang at middle of screen
+  // Load UI config from settings.json
+  useEffect(() => {
+    const loadConfig = async () => {
+      try {
+        const response = await fetch('/settings.json');
+        if (response.ok) {
+          const config = await response.json();
+          if (config.ui) {
+            setUiConfig(config.ui);
+            // Update canvas dimensions with config value
+            setCanvasDimensions({ width: config.ui.timelineCanvasWidthPx, height: window.innerHeight });
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load UI config:', err);
+      }
+    };
+    loadConfig();
+  }, []);
+
+  // Load transform from URL on mount or redirect to default state from config
   useEffect(() => {
     // Initialize canvas dimensions on client side
-    setCanvasDimensions({ width: 200, height: window.innerHeight });
+    const viewportHeight = window.innerHeight;
+    setCanvasDimensions({ width: uiConfig.timelineCanvasWidthPx, height: viewportHeight });
 
     const params = new URLSearchParams(window.location.search);
     const y = parseFloat(params.get('y') || '');
@@ -45,12 +81,45 @@ export default function Home() {
       const clampedK = Math.max(1, Math.min(1e18, k));
       setTransform({ y, k: clampedK });
     } else {
-      // Default: Big Bang at middle of screen
-      // Big Bang Y = window.innerHeight * k + y
-      // We want Big Bang at middle: window.innerHeight / 2
-      // So: window.innerHeight * 1 + y = window.innerHeight / 2
-      // y = window.innerHeight / 2 - window.innerHeight = -window.innerHeight / 2
-      setTransform({ y: -window.innerHeight / 2, k: 1 });
+      // Load default transform from config and calculate y for current viewport height
+      const loadDefaultTransform = async () => {
+        try {
+          const response = await fetch('/settings.json');
+          if (response.ok) {
+            const config = await response.json();
+            if (config.default_transform) {
+              const { k: defaultK } = config.default_transform;
+
+              // Constants from coordinateHelper
+              const START_TIME = -435494878264400000;
+              const END_TIME = 435457000000000000;
+              const target2022 = Math.floor(new Date('2022-01-01').getTime() / 1000);
+
+              // Calculate y for current viewport height
+              // Formula: y_position = ((END_TIME - unixSeconds) / (END_TIME - START_TIME)) * timelineHeight * k + transform.y
+              // At center, we want unixSeconds = target2022
+              // centerScreenY = ((END_TIME - target2022) / (END_TIME - START_TIME)) * timelineHeight * k + transform.y
+              // transform.y = centerScreenY - ((END_TIME - target2022) / (END_TIME - START_TIME)) * timelineHeight * k
+
+              const centerScreenY = viewportHeight / 2;
+              const ratio = (END_TIME - target2022) / (END_TIME - START_TIME);
+              const calculatedY = centerScreenY - (ratio * viewportHeight * defaultK);
+
+              const newParams = new URLSearchParams();
+              newParams.set('y', calculatedY.toString());
+              newParams.set('k', defaultK.toString());
+              window.location.replace(`?${newParams.toString()}`);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to load default transform from config:', err);
+          // Fallback to Big Bang at middle
+          const fallbackTransform = { y: -viewportHeight / 2, k: 1 };
+          setTransform(fallbackTransform);
+        }
+      };
+
+      loadDefaultTransform();
     }
   }, []);
 
@@ -139,8 +208,8 @@ export default function Home() {
 
     debounceTimerRef.current = setTimeout(() => {
       const params = new URLSearchParams();
-      params.set('y', constrainedTransform.y.toFixed(2));
-      params.set('k', constrainedTransform.k.toFixed(2));
+      params.set('y', constrainedTransform.y.toString());
+      params.set('k', constrainedTransform.k.toString());
       window.history.replaceState({}, '', `?${params.toString()}`);
     }, 300); // Update URL after 300ms of inactivity
   }, [canvasDimensions, START_TIME, END_TIME, FUTURE_HORIZON_TIME]);
@@ -228,20 +297,42 @@ export default function Home() {
     );
   }
 
+  const handleResetToDefault = () => {
+    window.location.href = '/';
+  };
+
   return (
     <main className="relative h-screen w-screen bg-gray-900 text-white flex" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
+      {/* Reset to Default Button - Matching Now Arrow with Tail */}
+      <button
+        onClick={handleResetToDefault}
+        className="absolute z-50 hover:opacity-80 transition-opacity"
+        style={{ top: '8px', left: '8px' }}
+        title="Return to default view"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="w-12 h-12">
+          <defs>
+            <filter id="roundCorners">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="1.5"/>
+            </filter>
+          </defs>
+          <polygon points="40,10 22,42 58,42" fill="#d1d5db" stroke="#d1d5db" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" filter="url(#roundCorners)"/>
+          <rect x="37" y="42" width="6" height="13" rx="3" fill="#d1d5db"/>
+        </svg>
+      </button>
+
       {/* Canvas Timeline */}
-      <div className="h-full flex-shrink-0" style={{ width: '200px' }}>
+      <div className="h-full flex-shrink-0" style={{ width: `${uiConfig.timelineCanvasWidthPx}px` }}>
         <TimelineCanvas events={events} displayedCardEvents={displayedCardEvents} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onVisibleEventsChange={setVisibleEvents} initialTransform={transform} transform={transform} onCanvasClick={handleCanvasClick} onShiftClick={handleShiftClick} onDimensionsChange={handleCanvasDimensionsChange} modalOpen={modalOpen} />
       </div>
 
       {/* Event Panel - Remaining flex space (no relationships panel) */}
       <div className="flex-1 h-full">
-        <EventPanel selectedEvent={selectedEvent} events={events} visibleEvents={visibleEvents} transform={transform} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onDisplayedEventsChange={handleDisplayedEventsChange} />
+        <EventPanel selectedEvent={selectedEvent} events={events} visibleEvents={visibleEvents} transform={transform} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onDisplayedEventsChange={handleDisplayedEventsChange} cardHeightPx={uiConfig.cardHeightPx} cardViewportPaddingPx={uiConfig.cardViewportPaddingPx} imagePaddingPx={uiConfig.imagePaddingPx} />
       </div>
 
       {/* Geolocation Map - Right side full height */}
-      <div className="h-full flex-shrink-0 relative" style={{ width: '45%', zIndex: 1 }}>
+      <div className="h-full flex-shrink-0 relative" style={{ width: `${uiConfig.mapWidthPercent}%`, zIndex: 1 }}>
         <Suspense fallback={<div className="w-full h-full flex items-center justify-center bg-gray-800"><p>Loading map...</p></div>}>
           <GeoMap events={displayedCardEvents} selectedEvent={selectedEvent} onEventClick={handleEventClick} />
         </Suspense>
