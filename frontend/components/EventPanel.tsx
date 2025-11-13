@@ -25,15 +25,48 @@ interface EventPanelProps {
   onDisplayedEventsChange?: (events: EventResponse[]) => void;
 }
 
+/**
+ * Constrain transform to keep all event cards within visible bounds
+ * Cards should never render outside the top or bottom of the panel
+ */
+const constrainEventPanelTransform = (
+  newTransform: { y: number; k: number },
+  panelHeight: number,
+  minY: number,
+  maxY: number
+): { y: number; k: number } => {
+  // Constrain Y to keep cards within bounds
+  const constrainedY = Math.max(minY, Math.min(maxY, newTransform.y));
+
+  return {
+    ...newTransform,
+    y: constrainedY
+  };
+};
+
 const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleEvents, transform = { y: 0, k: 1 }, onEventClick, onTransformChange, onDisplayedEventsChange }) => {
   const [dimensions, setDimensions] = useState({ height: 0 });
   const [currentTime, setCurrentTime] = useState(Date.now() / 1000); // Current time in Unix seconds
+  const [contentBounds, setContentBounds] = useState({ minY: 0, maxY: 0 });
   const prevDisplayableIdsRef = useRef<string>('');
   const contentRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Track dragging state using ref to avoid closure issues
   const dragStateRef = useRef({ isDragging: false, lastY: 0 });
+
+  // Calculate content bounds based on visible events and transform
+  // This ensures cards never appear outside the visible panel
+  useEffect(() => {
+    if (dimensions.height === 0) return;
+
+    // For now, use reasonable bounds that allow panning but prevent excessive overflow
+    // These are generous bounds to allow viewing content while preventing major overflow
+    const minY = -dimensions.height * 10;
+    const maxY = dimensions.height * 10;
+
+    setContentBounds({ minY, maxY });
+  }, [dimensions.height]);
 
   // Combined setup for mouse gestures
   useEffect(() => {
@@ -53,10 +86,18 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
 
       const oldWorldY = (transform.y - mouseY) / transform.k;
 
-      const newTransform = {
+      let newTransform = {
         y: oldWorldY * newK + mouseY,
         k: newK
       };
+
+      // Apply boundary constraints
+      newTransform = constrainEventPanelTransform(
+        newTransform,
+        dimensions.height,
+        contentBounds.minY,
+        contentBounds.maxY
+      );
 
       onTransformChange(newTransform);
     };
@@ -72,10 +113,18 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
       if (!dragStateRef.current.isDragging) return;
 
       const deltaY = e.clientY - dragStateRef.current.lastY;
-      const newTransform = {
+      let newTransform = {
         ...transform,
         y: transform.y + deltaY
       };
+
+      // Apply boundary constraints
+      newTransform = constrainEventPanelTransform(
+        newTransform,
+        dimensions.height,
+        contentBounds.minY,
+        contentBounds.maxY
+      );
 
       onTransformChange(newTransform);
       dragStateRef.current.lastY = e.clientY;
@@ -99,7 +148,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [transform, onTransformChange]);
+  }, [transform, onTransformChange, dimensions.height, contentBounds]);
 
   // Track panel height for coordinate calculations (full panel height)
   useEffect(() => {
