@@ -4,16 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { EventResponse } from '@/types';
 import { calculateEventY, getDisplayableEvents } from '@/lib/coordinateHelper';
 import { getEventImageUrl } from '@/lib/imageHelper';
-
-const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
-  cosmic: { bg: '#8b5cf6', text: '#f5e6ff' },
-  geological: { bg: '#f59e0b', text: '#1f2937' },
-  biological: { bg: '#10b981', text: '#f0fdf4' },
-  historical: { bg: '#ef4444', text: '#fef2f2' },
-  political: { bg: '#3b82f6', text: '#eff6ff' },
-  technological: { bg: '#06b6d4', text: '#f0f9fa' },
-  contemporary: { bg: '#ec4899', text: '#fdf2f8' },
-};
+import { getCategoryHierarchy, getCategoryColor, getCategoryColors } from '@/lib/categoryColors';
 
 interface EventPanelProps {
   selectedEvent: EventResponse | null;
@@ -21,11 +12,14 @@ interface EventPanelProps {
   visibleEvents: EventResponse[];
   transform?: { y: number; k: number };
   onEventClick?: (event: EventResponse) => void;
+  onShiftClickImage?: (event: EventResponse) => void;
   onTransformChange?: (transform: { y: number; k: number }) => void;
   onDisplayedEventsChange?: (events: EventResponse[]) => void;
   cardHeightPx?: number;
   cardViewportPaddingPx?: number;
   imagePaddingPx?: number;
+  onCategoryFilter?: (categoryId: string) => void;
+  categoryFilter?: string | null;
 }
 
 const constrainEventPanelTransform = (
@@ -38,7 +32,16 @@ const constrainEventPanelTransform = (
   return { ...newTransform, y: constrainedY };
 };
 
-const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleEvents, transform = { y: 0, k: 1 }, onEventClick, onTransformChange, onDisplayedEventsChange, cardHeightPx, cardViewportPaddingPx, imagePaddingPx }) => {
+const getTextColorForBg = (bgColor: string): string => {
+  // Simple heuristic: dark colors get light text
+  const isDark = bgColor.startsWith('#0') || bgColor.startsWith('#1') ||
+                 bgColor.startsWith('#2') || bgColor.startsWith('#3') ||
+                 bgColor.startsWith('#4') || bgColor.startsWith('#5') ||
+                 bgColor.startsWith('#6') || bgColor.startsWith('#7');
+  return isDark ? '#f3f4f6' : '#1f2937';
+};
+
+const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleEvents, transform = { y: 0, k: 1 }, onEventClick, onShiftClickImage, onTransformChange, onDisplayedEventsChange, cardHeightPx, cardViewportPaddingPx, imagePaddingPx, onCategoryFilter, categoryFilter }) => {
   const [dimensions, setDimensions] = useState({ height: 0 });
   const [currentTime, setCurrentTime] = useState(Date.now() / 1000); // Current time in Unix seconds
   const [contentBounds, setContentBounds] = useState({ minY: 0, maxY: 0 });
@@ -329,7 +332,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                       className="p-2 bg-gray-800 rounded border border-gray-700 cursor-pointer transition overflow-hidden flex flex-row gap-2"
                       style={{
                         height: '100%',
-                        borderLeft: `6px solid ${event.category && CATEGORY_COLORS[event.category]?.bg ? CATEGORY_COLORS[event.category].bg : '#3b82f6'}`
+                        borderLeft: `6px solid ${getCategoryColor(event.category)}`
                       }}
                     >
                       {/* Event Image - Square container on left */}
@@ -352,23 +355,36 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                       {/* Content on right */}
                       <div className="flex flex-col flex-1 overflow-hidden">
                         {/* First line: Time and Category Tag */}
-                        <div className="flex items-center gap-1 flex-shrink-0">
+                        <div className="flex items-center gap-1 flex-shrink-0 justify-between">
                           {/* Event Time - All resolutions */}
                           <div className="text-xs text-blue-400 font-bold whitespace-nowrap">
                             {event.formatted_time}
                           </div>
 
-                          {/* Category Tag */}
+                          {/* Category Tags - Hierarchy */}
                           {event.category && (
-                            <span
-                              className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0 w-fit"
-                              style={{
-                                backgroundColor: CATEGORY_COLORS[event.category]?.bg || '#3b82f6',
-                                color: CATEGORY_COLORS[event.category]?.text || '#eff6ff'
-                              }}
-                            >
-                              {event.category.toUpperCase()}
-                            </span>
+                            <div className="flex gap-1 flex-wrap">
+                              {getCategoryHierarchy(event.category).map((cat) => (
+                                <span
+                                  key={cat.id}
+                                  className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0 w-fit cursor-pointer hover:opacity-80 transition-opacity"
+                                  style={{
+                                    backgroundColor: cat.color,
+                                    color: getTextColorForBg(cat.color),
+                                    outline: categoryFilter === cat.id ? '2px solid white' : 'none'
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onCategoryFilter) {
+                                      onCategoryFilter(cat.id);
+                                    }
+                                  }}
+                                  title={`Filter by ${cat.name}`}
+                                >
+                                  {cat.name}
+                                </span>
+                              ))}
+                            </div>
                           )}
                         </div>
 
@@ -379,7 +395,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
 
                         {/* Event Description */}
                         {event.description && (
-                          <p className="text-xs text-gray-300 overflow-hidden line-clamp-1">
+                          <p className="text-xs text-gray-300 overflow-hidden line-clamp-2">
                             {event.description}
                           </p>
                         )}
@@ -391,33 +407,44 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                       className="p-2 bg-gray-800 rounded border border-gray-700 transition overflow-hidden flex flex-row gap-2"
                       style={{
                         height: '100%',
-                        borderLeft: `6px solid ${event.category && CATEGORY_COLORS[event.category]?.bg ? CATEGORY_COLORS[event.category].bg : '#3b82f6'}`
+                        borderLeft: `6px solid ${getCategoryColor(event.category)}`
                       }}
                     >
-                      {/* Event Image - Square container on left */}
+                      {/* Event Image - Square container on left (always rendered for alignment) */}
                       {(() => {
                         const imageUrl = getEventImageUrl(event);
-                        return imageUrl ? (
+                        return (
                           <div
-                            onClick={() => onEventClick?.(event)}
-                            className="w-20 h-20 bg-gray-900 rounded flex-shrink-0 border border-gray-600 overflow-hidden hover:border-blue-500 cursor-pointer transition"
+                            onClick={(e) => {
+                              if (imageUrl) {
+                                if (e.shiftKey) {
+                                  onShiftClickImage?.(event);
+                                } else {
+                                  onEventClick?.(event);
+                                }
+                              }
+                            }}
+                            className={`w-20 h-20 bg-gray-900 rounded flex-shrink-0 border border-gray-600 overflow-hidden ${imageUrl ? 'hover:border-blue-500 cursor-pointer' : ''} transition`}
+                            title={imageUrl ? "Click to view | Shift+Click to link" : undefined}
                           >
-                            <img
-                              src={imageUrl}
-                              alt={event.title}
-                              className="w-full h-full object-contain"
-                              onError={(e) => {
-                                (e.target as HTMLImageElement).style.display = 'none';
-                              }}
-                            />
+                            {imageUrl && (
+                              <img
+                                src={imageUrl}
+                                alt={event.title}
+                                className="w-full h-full object-contain"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            )}
                           </div>
-                        ) : null;
+                        );
                       })()}
 
                       {/* Content on right */}
                       <div className="flex flex-col flex-1 overflow-hidden">
                         {/* First line: Time and Category Tag */}
-                        <div className="flex items-center gap-1 flex-shrink-0">
+                        <div className="flex items-center gap-1 flex-shrink-0 justify-between">
                           {/* Event Time - Year, Month, Day, Time */}
                           <div className="text-xs text-blue-400 font-bold whitespace-nowrap">
                             {(() => {
@@ -473,17 +500,30 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                             })()}
                           </div>
 
-                          {/* Category Tag */}
+                          {/* Category Tags - Hierarchy */}
                           {event.category && (
-                            <span
-                              className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0 w-fit"
-                              style={{
-                                backgroundColor: CATEGORY_COLORS[event.category]?.bg || '#3b82f6',
-                                color: CATEGORY_COLORS[event.category]?.text || '#eff6ff'
-                              }}
-                            >
-                              {event.category.toUpperCase()}
-                            </span>
+                            <div className="flex gap-1 flex-wrap">
+                              {getCategoryHierarchy(event.category).map((cat) => (
+                                <span
+                                  key={cat.id}
+                                  className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0 w-fit cursor-pointer hover:opacity-80 transition-opacity"
+                                  style={{
+                                    backgroundColor: cat.color,
+                                    color: getTextColorForBg(cat.color),
+                                    outline: categoryFilter === cat.id ? '2px solid white' : 'none'
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onCategoryFilter) {
+                                      onCategoryFilter(cat.id);
+                                    }
+                                  }}
+                                  title={`Filter by ${cat.name}`}
+                                >
+                                  {cat.name}
+                                </span>
+                              ))}
+                            </div>
                           )}
                         </div>
 
@@ -494,7 +534,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
 
                         {/* Event Description */}
                         {event.description && (
-                          <p className="text-xs text-gray-300 overflow-hidden line-clamp-1">
+                          <p className="text-xs text-gray-300 overflow-hidden line-clamp-2">
                             {event.description}
                           </p>
                         )}

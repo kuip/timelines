@@ -31,11 +31,24 @@ export interface Event {
   image_url?: string;
 }
 
+export interface EventSource {
+  id: string;
+  event_id: string;
+  source_type: string;
+  title?: string;
+  url?: string;
+  citation?: string;
+  credibility_score: number;
+  added_by_user_id?: string;
+  created_at: string;
+}
+
 export interface EventResponse extends Event {
   formatted_time: string;
   vote_stats?: VoteStats;
   source_count: number;
   discussion_count: number;
+  sources?: EventSource[];
 }
 
 export interface VoteStats {

@@ -6,7 +6,7 @@
   },
   "ui": {
     "timelineCanvasWidthPx": 200,
-    "mapWidthPercent": 45,
+    "mapWidthPercent": 35,
     "cardHeightPx": 100,
     "cardViewportPaddingPx": 0,
     "imagePaddingPx": 2

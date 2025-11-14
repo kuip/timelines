@@ -85,6 +85,7 @@ type EventResponse struct {
 	VoteStats     *VoteStats `json:"vote_stats,omitempty"`
 	SourceCount   int `json:"source_count"`
 	DiscussionCount int `json:"discussion_count"`
+	Sources       []*EventSource `json:"sources,omitempty"`
 }
 
 // VoteStats represents aggregated vote statistics
@@ -99,16 +100,17 @@ type VoteStats struct {
 
 // User represents a user
 type User struct {
-	ID          string     `json:"id" db:"id"`
-	XUserID     *string    `json:"x_user_id,omitempty" db:"x_user_id"`
-	Username    *string    `json:"username,omitempty" db:"username"`
-	DisplayName *string    `json:"display_name,omitempty" db:"display_name"`
-	AvatarURL   *string    `json:"avatar_url,omitempty" db:"avatar_url"`
-	Bio         *string    `json:"bio,omitempty" db:"bio"`
-	Role        string     `json:"role" db:"role"`
-	IsActive    bool       `json:"is_active" db:"is_active"`
-	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
-	LastLoginAt *time.Time `json:"last_login_at,omitempty" db:"last_login_at"`
+	ID                  string     `json:"id" db:"id"`
+	XUserID             *string    `json:"x_user_id,omitempty" db:"x_user_id"`
+	Username            *string    `json:"username,omitempty" db:"username"`
+	DisplayName         *string    `json:"display_name,omitempty" db:"display_name"`
+	AvatarURL           *string    `json:"avatar_url,omitempty" db:"avatar_url"`
+	Bio                 *string    `json:"bio,omitempty" db:"bio"`
+	Role                string     `json:"role" db:"role"`
+	IsActive            bool       `json:"is_active" db:"is_active"`
+	IsTwitterVerified   bool       `json:"is_twitter_verified" db:"is_twitter_verified"`
+	CreatedAt           time.Time  `json:"created_at" db:"created_at"`
+	LastLoginAt         *time.Time `json:"last_login_at,omitempty" db:"last_login_at"`
 }
 
 // XMessage represents a cached X.com message

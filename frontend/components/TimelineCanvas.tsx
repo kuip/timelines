@@ -14,7 +14,7 @@ import {
   formatExtremityLabels,
 } from '@/lib/tickGeneration';
 import {
-  CATEGORY_COLORS,
+  getCategoryColor,
   drawTimelineLine,
   drawNowMarker,
   drawFutureHorizonMarker,
@@ -483,7 +483,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
       if (unixSeconds < START_TIME || unixSeconds > FUTURE_HORIZON_TIME) return;
 
       if (y >= 0 && y <= dimensions.height) {
-        const color = (event.category && CATEGORY_COLORS[event.category]) || '#3b82f6';
+        const color = getCategoryColor(event.category);
         drawEventMarker(ctx, y, timelineX, color);
       }
     });
@@ -528,7 +528,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
       drawnRelationships.add(relationshipKey);
 
       const timeRangeSeconds = Math.abs(unixSecondsB - unixSecondsA);
-      const color = (eventA.category && CATEGORY_COLORS[eventA.category]) || '#3b82f6';
+      const color = getCategoryColor(eventA.category);
 
       // Always draw from later event (larger unixSeconds) to earlier event
       const isALater = unixSecondsA > unixSecondsB;

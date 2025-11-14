@@ -205,3 +205,71 @@ func (h *GeolocationHandler) GetEventLocations(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"locations": locations})
 }
+
+// UpdateEventLocation handles PUT /api/events/:id/locations/primary
+// Updates the primary location for an event with coordinates
+func (h *GeolocationHandler) UpdateEventLocation(c *gin.Context) {
+	eventID := c.Param("id")
+
+	var req struct {
+		Latitude  float64 `json:"latitude" binding:"required"`
+		Longitude float64 `json:"longitude" binding:"required"`
+		Name      string  `json:"location_name"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Create GeoJSON Point geometry from coordinates
+	geometry := map[string]interface{}{
+		"type":        "Point",
+		"coordinates": []float64{req.Longitude, req.Latitude}, // GeoJSON uses [lon, lat]
+	}
+
+	geojsonStr, _ := json.Marshal(geometry)
+
+	// Check if primary location already exists
+	query := `
+	SELECT id FROM event_locations
+	WHERE event_id = $1 AND is_primary = true
+	LIMIT 1
+	`
+
+	var locationID sql.NullString
+	err := h.db.QueryRow(query, eventID).Scan(&locationID)
+
+	var result interface{}
+
+	if err == nil && locationID.Valid {
+		// Update existing primary location
+		updateQuery := `
+		UPDATE event_locations
+		SET geojson = $1, location_name = $2, location_point = ST_PointFromText('POINT(' || $3 || ' ' || $4 || ')')
+		WHERE id = $5
+		RETURNING id
+		`
+
+		err := h.db.QueryRow(updateQuery, geojsonStr, req.Name, req.Longitude, req.Latitude, locationID.String).Scan(&result)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update location"})
+			return
+		}
+	} else {
+		// Create new primary location
+		insertQuery := `
+		INSERT INTO event_locations (id, event_id, location_name, location_type, geojson, location_point, confidence_score, is_primary)
+		VALUES (gen_random_uuid(), $1, $2, 'user_edited', $3, ST_PointFromText('POINT(' || $4 || ' ' || $5 || ')'), 100, true)
+		RETURNING id
+		`
+
+		err := h.db.QueryRow(insertQuery, eventID, req.Name, geojsonStr, req.Longitude, req.Latitude).Scan(&result)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create location", "details": err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Location updated successfully", "location_id": result})
+}

@@ -9,6 +9,9 @@ import { EventResponse } from '@/types';
 import { eventsApi } from '@/lib/api';
 import { constrainTransform, type Transform } from '@/lib/canvasInteraction';
 import { getFutureHorizonTime } from '@/lib/coordinateHelper';
+import { useAuth } from '@/lib/useAuth';
+import AuthInfo from '@/components/AuthInfo';
+import { categoryMatchesFilter } from '@/lib/categoryColors';
 
 const GeoMap = dynamic(() => import('@/components/GeoMap'), { ssr: false });
 
@@ -21,6 +24,9 @@ interface UIConfig {
 }
 
 export default function Home() {
+  // Auth hook for managing user authentication
+  const { canEdit } = useAuth();
+
   const [events, setEvents] = useState<EventResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +46,9 @@ export default function Home() {
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const modalRef = useRef<EventDetailModalHandle>(null);
   const prevCardIdsRef = useRef<string>('');
+  const [editingLocationMode, setEditingLocationMode] = useState(false);
+  const [editingEventLocation, setEditingEventLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 
   // Constants for timeline
   const START_TIME = -435494878264400000;
@@ -50,7 +59,7 @@ export default function Home() {
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const response = await fetch('/settings.json');
+        const response = await fetch(`/settings.json?t=${Date.now()}`);
         if (response.ok) {
           const config = await response.json();
           if (config.ui) {
@@ -84,7 +93,7 @@ export default function Home() {
       // Load default transform from config and calculate y for current viewport height
       const loadDefaultTransform = async () => {
         try {
-          const response = await fetch('/settings.json');
+          const response = await fetch(`/settings.json?t=${Date.now()}`);
           if (response.ok) {
             const config = await response.json();
             if (config.default_transform) {
@@ -256,6 +265,14 @@ export default function Home() {
     }
   }, [modalOpen]);
 
+  const handleShiftClickImage = useCallback((linkedEvent: EventResponse) => {
+    // Add linked event to the currently open modal
+    if (modalRef.current && selectedEvent) {
+      console.log('Adding linked event:', linkedEvent.id);
+      modalRef.current.addLinkedEvent(linkedEvent.id);
+    }
+  }, [selectedEvent]);
+
   const handleCanvasDimensionsChange = useCallback((dimensions: { width: number; height: number }) => {
     setCanvasDimensions(dimensions);
   }, []);
@@ -268,6 +285,72 @@ export default function Home() {
       setDisplayedCardEvents(newCards);
     }
   }, []);
+
+  const handleMapClick = useCallback((lat: number, lng: number) => {
+    // When modal is open and in editing location mode, update the location fields
+    if (editingLocationMode && modalRef.current) {
+      console.log('Map click: updating location to', { lat, lng });
+      modalRef.current.updateLocationCoordinates(lat, lng);
+      setEditingEventLocation({ lat, lng });
+    }
+  }, [editingLocationMode]);
+
+  const handleCategoryFilter = useCallback((categoryId: string) => {
+    // Toggle filter: if clicking the same category, clear filter
+    setCategoryFilter(prev => prev === categoryId ? null : categoryId);
+  }, []);
+
+  // When modal closes, disable editing location mode and clear editing location
+  useEffect(() => {
+    if (!modalOpen) {
+      setEditingLocationMode(false);
+      setEditingEventLocation(null);
+    }
+  }, [modalOpen]);
+
+  // When entering edit mode, initialize editing location with selected event's coordinates
+  useEffect(() => {
+    if (editingLocationMode && selectedEvent && modalRef.current) {
+      // Get the current coordinates from the modal's form data
+      // We need to call a method on the modal ref to get the location coordinates
+      // For now, try to fetch the event's location
+      const fetchEventLocation = async () => {
+        try {
+          // Get API URL from settings first, fallback to environment variable
+          let apiUrl = 'http://localhost:8080';
+          try {
+            const settingsResponse = await fetch('/settings.json?t=' + Date.now());
+            if (settingsResponse.ok) {
+              const settings = await settingsResponse.json();
+              if (settings.api_url) {
+                apiUrl = settings.api_url;
+              }
+            }
+          } catch (e) {
+            // Fall through to default
+          }
+
+          const response = await fetch(`${apiUrl}/api/events/${selectedEvent.id}/locations?t=${Date.now()}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.locations && data.locations.length > 0) {
+              const primaryLocation = data.locations.find((loc: any) => loc.is_primary) || data.locations[0];
+              if (primaryLocation && primaryLocation.geojson?.type === 'Point') {
+                const [lng, lat] = primaryLocation.geojson.coordinates;
+                console.log('Initializing edit mode with location:', { lat, lng });
+                setEditingEventLocation({ lat, lng });
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Failed to fetch event location for editing:', err);
+          // Fallback to default center coordinates
+          setEditingEventLocation({ lat: 0, lng: 0 });
+        }
+      };
+      fetchEventLocation();
+    }
+  }, [editingLocationMode, selectedEvent]);
 
   if (loading) {
     return (
@@ -301,8 +384,23 @@ export default function Home() {
     window.location.href = '/';
   };
 
+  // Filter events based on category filter
+  // Supports filtering by both exact category and parent categories
+  const filteredEvents = categoryFilter
+    ? events.filter(event => {
+        if (!event.category) return false;
+        // Check if event's category matches filter (exact match or is a descendant)
+        return categoryMatchesFilter(event.category, categoryFilter);
+      })
+    : events;
+
   return (
     <main className="relative h-screen w-screen bg-gray-900 text-white flex" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
+      {/* Auth Info - Top Right */}
+      <div className="absolute z-50 top-2 right-4">
+        <AuthInfo />
+      </div>
+
       {/* Reset to Default Button - Matching Now Arrow with Tail */}
       <button
         onClick={handleResetToDefault}
@@ -323,18 +421,25 @@ export default function Home() {
 
       {/* Canvas Timeline */}
       <div className="h-full flex-shrink-0" style={{ width: `${uiConfig.timelineCanvasWidthPx}px` }}>
-        <TimelineCanvas events={events} displayedCardEvents={displayedCardEvents} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onVisibleEventsChange={setVisibleEvents} initialTransform={transform} transform={transform} onCanvasClick={handleCanvasClick} onShiftClick={handleShiftClick} onDimensionsChange={handleCanvasDimensionsChange} modalOpen={modalOpen} />
+        <TimelineCanvas events={filteredEvents} displayedCardEvents={displayedCardEvents} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onVisibleEventsChange={setVisibleEvents} initialTransform={transform} transform={transform} onCanvasClick={handleCanvasClick} onShiftClick={handleShiftClick} onDimensionsChange={handleCanvasDimensionsChange} modalOpen={modalOpen} />
       </div>
 
       {/* Event Panel - Remaining flex space (no relationships panel) */}
       <div className="flex-1 h-full">
-        <EventPanel selectedEvent={selectedEvent} events={events} visibleEvents={visibleEvents} transform={transform} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onDisplayedEventsChange={handleDisplayedEventsChange} cardHeightPx={uiConfig.cardHeightPx} cardViewportPaddingPx={uiConfig.cardViewportPaddingPx} imagePaddingPx={uiConfig.imagePaddingPx} />
+        <EventPanel selectedEvent={selectedEvent} events={filteredEvents} visibleEvents={visibleEvents} transform={transform} onEventClick={handleEventClick} onShiftClickImage={handleShiftClickImage} onTransformChange={handleTimelineTransform} onDisplayedEventsChange={handleDisplayedEventsChange} cardHeightPx={uiConfig.cardHeightPx} cardViewportPaddingPx={uiConfig.cardViewportPaddingPx} imagePaddingPx={uiConfig.imagePaddingPx} onCategoryFilter={handleCategoryFilter} categoryFilter={categoryFilter} />
       </div>
 
       {/* Geolocation Map - Right side full height */}
       <div className="h-full flex-shrink-0 relative" style={{ width: `${uiConfig.mapWidthPercent}%`, zIndex: 1 }}>
         <Suspense fallback={<div className="w-full h-full flex items-center justify-center bg-gray-800"><p>Loading map...</p></div>}>
-          <GeoMap events={displayedCardEvents} selectedEvent={selectedEvent} onEventClick={handleEventClick} />
+          <GeoMap
+            events={visibleEvents}
+            selectedEvent={selectedEvent}
+            onEventClick={handleEventClick}
+            onMapClick={handleMapClick}
+            editingEventLocation={editingEventLocation}
+            isEditingLocation={editingLocationMode}
+          />
         </Suspense>
       </div>
 
@@ -346,6 +451,9 @@ export default function Home() {
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onEventUpdate={handleEventUpdate}
+        onShiftClickImage={handleShiftClickImage}
+        onEditingLocationModeChange={setEditingLocationMode}
+        canEdit={canEdit}
       />
     </main>
   );

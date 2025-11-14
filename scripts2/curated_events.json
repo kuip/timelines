@@ -1,0 +1,274 @@
+{
+  "events": [
+    {
+      "title": "Apollo 11 Moon Landing",
+      "description": "Apollo 11 was the first crewed mission to land humans on the Moon. Astronauts Neil Armstrong and Buzz Aldrin landed the Lunar Module Eagle on July 20, 1969, while Michael Collins orbited above. Armstrong's first steps marked a defining moment in human history and space exploration.",
+      "unix_seconds": -14182980,
+      "unix_nanos": 0,
+      "precision_level": "day",
+      "category": "space_exploration.crewed_lunar_missions",
+      "importance_score": 98,
+      "latitude": 0.67408,
+      "longitude": 23.47298,
+      "location_name": "Tranquility Base, Moon",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/9/98/Aldrin_Apollo_11_original.jpg",
+      "sources": [
+        {
+          "title": "Wikidata - Q182165",
+          "url": "https://www.wikidata.org/wiki/Q182165",
+          "source_type": "database",
+          "credibility_score": 95
+        },
+        {
+          "title": "Wikipedia - Apollo 11",
+          "url": "https://en.wikipedia.org/wiki/Apollo_11",
+          "source_type": "article",
+          "credibility_score": 90
+        }
+      ]
+    },
+    {
+      "title": "Wright Brothers First Flight",
+      "description": "On December 17, 1903, Orville and Wilbur Wright achieved the first controlled, sustained flight of a powered, heavier-than-air aircraft near Kitty Hawk, North Carolina. The Wright Flyer flew 120 feet in 12 seconds, revolutionizing transportation and launching the aviation age.",
+      "unix_seconds": -2082844800,
+      "unix_nanos": 0,
+      "precision_level": "day",
+      "category": "transportation.aviation.powered_flight",
+      "importance_score": 95,
+      "latitude": 36.01833,
+      "longitude": -75.66972,
+      "location_name": "Kill Devil Hills, North Carolina",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/f/fe/Wright_First_Flight_1903Dec17_%28full_restore%29.jpg",
+      "sources": [
+        {
+          "title": "Wikidata - Q275032",
+          "url": "https://www.wikidata.org/wiki/Q275032",
+          "source_type": "database",
+          "credibility_score": 95
+        },
+        {
+          "title": "Wikipedia - Wright Brothers",
+          "url": "https://en.wikipedia.org/wiki/Wright_brothers",
+          "source_type": "article",
+          "credibility_score": 90
+        }
+      ]
+    },
+    {
+      "title": "Fall of the Berlin Wall",
+      "description": "On November 9, 1989, the Berlin Wall, which had divided East and West Berlin since 1961, was opened. This momentous event symbolized the end of the Cold War and led to German reunification. Jubilant crowds dismantled sections of the wall that night.",
+      "unix_seconds": 626745600,
+      "unix_nanos": 0,
+      "precision_level": "day",
+      "category": "geopolitics.cold_war_collapse",
+      "importance_score": 96,
+      "latitude": 52.52,
+      "longitude": 13.405,
+      "location_name": "Berlin, Germany",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/a/a0/Berlinermauer.jpg",
+      "sources": [
+        {
+          "title": "Wikidata - Q4294",
+          "url": "https://www.wikidata.org/wiki/Q4294",
+          "source_type": "database",
+          "credibility_score": 95
+        },
+        {
+          "title": "Wikipedia - Berlin Wall",
+          "url": "https://en.wikipedia.org/wiki/Berlin_Wall",
+          "source_type": "article",
+          "credibility_score": 90
+        }
+      ]
+    },
+    {
+      "title": "Discovery of Penicillin",
+      "description": "In 1928, Alexander Fleming discovered penicillin, the world's first antibiotic, at St Mary's Hospital in London. He noticed that a mold called Penicillium notatum inhibited bacterial growth. This accidental discovery revolutionized medicine and has saved countless millions of lives worldwide.",
+      "unix_seconds": -1325376000,
+      "unix_nanos": 0,
+      "precision_level": "year",
+      "category": "medicine.pharmacology",
+      "importance_score": 97,
+      "latitude": 51.5174,
+      "longitude": -0.1753,
+      "location_name": "St Mary's Hospital, London",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/7/71/Penicillin_core.svg",
+      "sources": [
+        {
+          "title": "Wikidata - Q80919",
+          "url": "https://www.wikidata.org/wiki/Q80919",
+          "source_type": "database",
+          "credibility_score": 95
+        },
+        {
+          "title": "Wikipedia - Penicillin",
+          "url": "https://en.wikipedia.org/wiki/Penicillin",
+          "source_type": "article",
+          "credibility_score": 90
+        }
+      ]
+    },
+    {
+      "title": "First Transatlantic Telegraph Cable",
+      "description": "The first transatlantic telegraph cable was completed in 1866, connecting North America and Europe. This engineering marvel enabled near-instantaneous communication across the Atlantic Ocean for the first time, fundamentally transforming global commerce, diplomacy, and the flow of information between continents.",
+      "unix_seconds": -3281846400,
+      "unix_nanos": 0,
+      "precision_level": "year",
+      "category": "technology.telecommunications",
+      "importance_score": 88,
+      "latitude": 51.5074,
+      "longitude": -0.1278,
+      "location_name": "London, England",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/b/b6/Telegram_announcing_completion_of_Atlantic_cable.jpg",
+      "sources": [
+        {
+          "title": "Wikidata - Q843864",
+          "url": "https://www.wikidata.org/wiki/Q843864",
+          "source_type": "database",
+          "credibility_score": 95
+        },
+        {
+          "title": "Wikipedia - Transatlantic Telegraph Cable",
+          "url": "https://en.wikipedia.org/wiki/Transatlantic_telegraph_cable",
+          "source_type": "article",
+          "credibility_score": 90
+        }
+      ]
+    },
+    {
+      "title": "Gutenberg's Printing Press",
+      "description": "Around 1440, Johannes Gutenberg invented the movable-type printing press in Mainz, Germany. This revolutionary technology enabled mass production of books, democratized knowledge, and catalyzed the Renaissance, Reformation, and Scientific Revolution. The Gutenberg Bible was his first major printed work.",
+      "unix_seconds": -16725225600,
+      "unix_nanos": 0,
+      "precision_level": "year",
+      "category": "technology.printing.mechanical_press",
+      "importance_score": 99,
+      "latitude": 50.0,
+      "longitude": 8.2711,
+      "location_name": "Mainz, Germany",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/c/c3/PrintMus_038.jpg",
+      "sources": [
+        {
+          "title": "Wikidata - Q133274",
+          "url": "https://www.wikidata.org/wiki/Q133274",
+          "source_type": "database",
+          "credibility_score": 95
+        },
+        {
+          "title": "Wikipedia - Printing Press",
+          "url": "https://en.wikipedia.org/wiki/Printing_press",
+          "source_type": "article",
+          "credibility_score": 90
+        }
+      ]
+    },
+    {
+      "title": "World War II Ends in Europe",
+      "description": "On May 8, 1945, Nazi Germany unconditionally surrendered to Allied forces, ending World War II in Europe. Victory in Europe Day (VE Day) marked the conclusion of the deadliest conflict in human history. Celebrations erupted worldwide as millions welcomed peace after six years of war.",
+      "unix_seconds": -777945600,
+      "unix_nanos": 0,
+      "precision_level": "day",
+      "category": "warfare.world_war",
+      "importance_score": 98,
+      "latitude": 52.52,
+      "longitude": 13.405,
+      "location_name": "Berlin, Germany",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/1/14/Raising_a_flag_over_the_Reichstag_2.jpg",
+      "sources": [
+        {
+          "title": "Wikidata - Q2649",
+          "url": "https://www.wikidata.org/wiki/Q2649",
+          "source_type": "database",
+          "credibility_score": 95
+        },
+        {
+          "title": "Wikipedia - Victory in Europe Day",
+          "url": "https://en.wikipedia.org/wiki/Victory_in_Europe_Day",
+          "source_type": "article",
+          "credibility_score": 90
+        }
+      ]
+    },
+    {
+      "title": "American Declaration of Independence",
+      "description": "On July 4, 1776, the Continental Congress adopted the Declaration of Independence in Philadelphia, formally announcing the thirteen American colonies' separation from Great Britain. Drafted primarily by Thomas Jefferson, this document articulated fundamental principles of liberty, equality, and self-governance that influenced democracies worldwide.",
+      "unix_seconds": -6106060800,
+      "unix_nanos": 0,
+      "precision_level": "day",
+      "category": "geopolitics.independence",
+      "importance_score": 96,
+      "latitude": 39.9489,
+      "longitude": -75.1497,
+      "location_name": "Philadelphia, Pennsylvania",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/8/8f/United_States_Declaration_of_Independence.jpg",
+      "sources": [
+        {
+          "title": "Wikidata - Q127912",
+          "url": "https://www.wikidata.org/wiki/Q127912",
+          "source_type": "database",
+          "credibility_score": 95
+        },
+        {
+          "title": "Wikipedia - United States Declaration of Independence",
+          "url": "https://en.wikipedia.org/wiki/United_States_Declaration_of_Independence",
+          "source_type": "article",
+          "credibility_score": 90
+        }
+      ]
+    },
+    {
+      "title": "Discovery of DNA Structure",
+      "description": "In 1953, James Watson and Francis Crick discovered the double helix structure of DNA at Cambridge University, with crucial contributions from Rosalind Franklin's X-ray crystallography. This breakthrough unlocked the secrets of heredity and launched modern molecular biology, genetics, and biotechnology.",
+      "unix_seconds": -536112000,
+      "unix_nanos": 0,
+      "precision_level": "year",
+      "category": "science.biology.genetics",
+      "importance_score": 97,
+      "latitude": 52.2043,
+      "longitude": 0.1149,
+      "location_name": "Cambridge, England",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/4/4c/DNA_Structure%2BKey%2BLabelled.pn_NoBB.png",
+      "sources": [
+        {
+          "title": "Wikidata - Q6042232",
+          "url": "https://www.wikidata.org/wiki/Q6042232",
+          "source_type": "database",
+          "credibility_score": 95
+        },
+        {
+          "title": "Wikipedia - Molecular Structure of DNA",
+          "url": "https://en.wikipedia.org/wiki/Molecular_Structure_of_Nucleic_Acids:_A_Structure_for_Deoxyribose_Nucleic_Acid",
+          "source_type": "article",
+          "credibility_score": 90
+        }
+      ]
+    },
+    {
+      "title": "French Revolution Begins",
+      "description": "On July 14, 1789, Parisian revolutionaries stormed the Bastille fortress, marking the beginning of the French Revolution. This uprising against monarchial rule and aristocratic privilege transformed France and inspired revolutionary movements worldwide. The revolution's ideals of liberty, equality, and fraternity reshaped political thought globally.",
+      "unix_seconds": -5690764800,
+      "unix_nanos": 0,
+      "precision_level": "day",
+      "category": "geopolitics.revolution",
+      "importance_score": 95,
+      "latitude": 48.8566,
+      "longitude": 2.3522,
+      "location_name": "Paris, France",
+      "image_url": "https://upload.wikimedia.org/wikipedia/commons/1/17/Prise_de_la_Bastille.jpg",
+      "sources": [
+        {
+          "title": "Wikidata - Q127280",
+          "url": "https://www.wikidata.org/wiki/Q127280",
+          "source_type": "database",
+          "credibility_score": 95
+        },
+        {
+          "title": "Wikipedia - Storming of the Bastille",
+          "url": "https://en.wikipedia.org/wiki/Storming_of_the_Bastille",
+          "source_type": "article",
+          "credibility_score": 90
+        }
+      ]
+    }
+  ]
+}

@@ -389,3 +389,45 @@ func (r *EventRepository) CountEventsInRange(start, end decimal.Decimal) (int, e
 
 	return count, nil
 }
+
+// GetSourcesByEventID retrieves all sources for a specific event
+func (r *EventRepository) GetSourcesByEventID(eventID string) ([]*models.EventSource, error) {
+	query := `
+		SELECT id, event_id, source_type, title, url, citation, credibility_score, added_by_user_id, created_at
+		FROM event_sources
+		WHERE event_id = $1
+		ORDER BY created_at DESC
+	`
+
+	rows, err := r.db.Query(query, eventID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get event sources: %w", err)
+	}
+	defer rows.Close()
+
+	var sources []*models.EventSource
+	for rows.Next() {
+		source := &models.EventSource{}
+		err := rows.Scan(
+			&source.ID,
+			&source.EventID,
+			&source.SourceType,
+			&source.Title,
+			&source.URL,
+			&source.Citation,
+			&source.CredibilityScore,
+			&source.AddedByUserID,
+			&source.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan event source: %w", err)
+		}
+		sources = append(sources, source)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating event sources: %w", err)
+	}
+
+	return sources, nil
+}

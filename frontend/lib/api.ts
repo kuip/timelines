@@ -31,6 +31,17 @@ const api = axios.create({
   },
 });
 
+// Add authorization interceptor
+api.interceptors.request.use((config) => {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
 export const eventsApi = {
   // Get all events with optional filters
   getEvents: async (params?: EventQueryParams): Promise<{ events: EventResponse[]; count: number }> => {

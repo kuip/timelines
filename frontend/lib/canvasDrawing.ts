@@ -2,15 +2,10 @@
  * Canvas drawing utilities for timeline visualization
  */
 
-export const CATEGORY_COLORS: Record<string, string> = {
-  cosmic: '#8b5cf6',      // purple
-  geological: '#f59e0b',  // amber
-  biological: '#10b981',  // emerald
-  historical: '#ef4444',  // red
-  political: '#3b82f6',   // blue
-  technological: '#06b6d4', // cyan
-  contemporary: '#ec4899', // pink
-};
+import { getCategoryColor } from './categoryColors';
+
+// Re-export for backward compatibility
+export { getCategoryColor };
 
 /**
  * Draw the main timeline line

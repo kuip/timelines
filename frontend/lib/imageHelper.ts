@@ -29,23 +29,12 @@ const generateSVGDataUri = (bgColor: string, symbol: string): string => {
 };
 
 /**
- * Get appropriate image URL for an event based on category or title
- * Falls back to generic image if category not found
+ * Get appropriate image URL for an event
+ * Returns null if no real image exists (per CLAUDE.md: no placeholders/mocks)
  */
 export const getEventImageUrl = (event: EventResponse): string | null => {
-  // If event already has image_url, return it
-  if (event.image_url) {
-    return event.image_url;
-  }
-
-  // Try to get image based on category
-  if (event.category && CATEGORY_IMAGES[event.category]) {
-    const { bgColor, symbol } = CATEGORY_IMAGES[event.category];
-    return generateSVGDataUri(bgColor, symbol);
-  }
-
-  // Default fallback - generic colored square
-  return generateSVGDataUri('#4B5563', '📅');
+  // Only return real image URLs - no placeholders or mocks
+  return event.image_url || null;
 };
 
 /**

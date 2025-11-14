@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -41,8 +42,13 @@ func (h *EventHandler) CreateEvent(c *gin.Context) {
 		}
 	}
 
-	// TODO: Get user ID from auth context
+	// Get user ID from auth context
+	authUser, exists := c.Get("user")
 	var userID *string = nil
+	if exists && authUser != nil {
+		user := authUser.(*models.User)
+		userID = &user.ID
+	}
 
 	event, err := h.repo.Create(req, userID)
 	if err != nil {
@@ -71,12 +77,21 @@ func (h *EventHandler) GetEvent(c *gin.Context) {
 		return
 	}
 
+	// Fetch sources for this event
+	sources, err := h.repo.GetSourcesByEventID(id)
+	if err != nil {
+		// Log error but don't fail the entire request, just return empty sources
+		log.Printf("Warning: failed to fetch sources for event %s: %v", id, err)
+		sources = []*models.EventSource{}
+	}
+
 	// Convert to response with formatted time
 	response := models.EventResponse{
 		Event:         *event,
 		FormattedTime:   utils.FormatTimelineForDisplay(event.UnixSeconds, event.UnixNanos),
-		SourceCount:   0,
+		SourceCount:   len(sources),
 		DiscussionCount: 0,
+		Sources:       sources,
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -104,11 +119,19 @@ func (h *EventHandler) ListEvents(c *gin.Context) {
 	// Convert to response format
 	responses := make([]models.EventResponse, len(events))
 	for i, event := range events {
-			responses[i] = models.EventResponse{
-			Event:         event,
+		// Fetch sources for this event
+		sources, err := h.repo.GetSourcesByEventID(event.ID)
+		if err != nil {
+			log.Printf("Warning: failed to fetch sources for event %s: %v", event.ID, err)
+			sources = []*models.EventSource{}
+		}
+
+		responses[i] = models.EventResponse{
+			Event:           event,
 			FormattedTime:   utils.FormatTimelineForDisplay(event.UnixSeconds, event.UnixNanos),
-			SourceCount:   0,
+			SourceCount:     len(sources),
 			DiscussionCount: 0,
+			Sources:         sources,
 		}
 	}
 

@@ -19,25 +19,38 @@ interface GeoMapProps {
   selectedEvent: EventResponse | null;
   visibleEventIds?: Set<string>;
   onEventClick?: (event: EventResponse) => void;
+  onMapClick?: (lat: number, lng: number) => void;
+  editingEventLocation?: { lat: number; lng: number } | null;
+  isEditingLocation?: boolean;
 }
 
-export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapProps) {
+export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick, editingEventLocation, isEditingLocation }: GeoMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const [locations, setLocations] = useState<EventLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const [refetchTrigger, setRefetchTrigger] = useState(0);
   const markersRef = useRef<Map<string, any>>(new Map());
   const fetchedEventIdsRef = useRef<Set<string>>(new Set()); // Track what we've already fetched
+  const editingMarkerRef = useRef<any>(null); // Marker for editing location
 
   // Memoize event IDs as a string to detect actual content changes
   // Using a string instead of array prevents re-triggering useEffect when array reference changes
   const memoizedEventIdsStr = useMemo(() => {
-    if (!events || !Array.isArray(events) || events.length === 0) {
-      return '';
-    }
-    return events.map(e => e.id).join(',');
+    return (!events || !Array.isArray(events) || events.length === 0)
+      ? ''
+      : events.map(e => e.id).join(',');
   }, [events]);
+
+  // Clear cache if we have events but no locations (cache is stale)
+  useEffect(() => {
+    if (memoizedEventIdsStr.length > 0 && locations.length === 0 && fetchedEventIdsRef.current.size > 0) {
+      fetchedEventIdsRef.current.clear();
+      setRefetchTrigger(prev => prev + 1); // Trigger refetch
+    }
+  }, [memoizedEventIdsStr, locations.length]);
 
   // Fetch locations ONLY for displayed card events with memoization
   useEffect(() => {
@@ -50,6 +63,7 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
           setLocations([]);
           fetchedEventIdsRef.current.clear();
           setError(null);
+          setLoading(false);
           return;
         }
 
@@ -60,12 +74,6 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
 
         // Only fetch for NEW events we haven't seen before
         const newEventIds = eventIds.filter(id => !fetchedEventIdsRef.current.has(id));
-
-        if (newEventIds.length === 0) {
-          // No new events to fetch, don't make any API calls
-          setLoading(false);
-          return;
-        }
 
         // Fetch locations only for the NEW events
         const allLocations: EventLocation[] = [];
@@ -119,19 +127,23 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
           }
         }
 
-        // Only keep locations for currently visible events
-        // This prevents accumulating locations for events no longer in view
+        // ALWAYS filter locations to match currently visible events
+        // This runs even when no new events were fetched
         const visibleEventIds = new Set(eventIds);
         setLocations(prev => {
+          // Filter previous locations to only include visible events
           const filteredPrev = prev.filter(loc => visibleEventIds.has(loc.event_id));
 
-          // Deduplicate by location ID to avoid duplicate placemarks
-          const seenLocationIds = new Set(filteredPrev.map(loc => loc.id));
-          const newUniqueLocations = allLocations.filter(loc => !seenLocationIds.has(loc.id));
+          // If we fetched new locations, add them
+          if (allLocations.length > 0) {
+            // Deduplicate by location ID to avoid duplicate placemarks
+            const seenLocationIds = new Set(filteredPrev.map(loc => loc.id));
+            const newUniqueLocations = allLocations.filter(loc => !seenLocationIds.has(loc.id));
+            return [...filteredPrev, ...newUniqueLocations];
+          }
 
-          const combined = [...filteredPrev, ...newUniqueLocations];
-          // Ensure we only have locations for visible events
-          return combined.filter(loc => visibleEventIds.has(loc.event_id));
+          // If no new locations, just return filtered previous locations
+          return filteredPrev;
         });
         setError(null);
       } catch (err) {
@@ -143,7 +155,7 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
     };
 
     fetchLocations();
-  }, [memoizedEventIdsStr]);
+  }, [memoizedEventIdsStr, refetchTrigger]);
 
   // Initialize map on component mount
   useEffect(() => {
@@ -181,7 +193,15 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
           maxZoom: 19,
         }).addTo(map);
 
-        console.log('Map initialized successfully');
+        // Add map click handler for geolocation editing
+        map.on('click', (e: any) => {
+          if (onMapClick) {
+            const { lat, lng } = e.latlng;
+            onMapClick(lat, lng);
+          }
+        });
+
+        setMapReady(true); // Signal that map is ready for markers
       } catch (err) {
         console.error('Error initializing map:', err);
         setError('Failed to initialize map');
@@ -206,19 +226,18 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
 
   // Add markers when locations or memoized event IDs change
   useEffect(() => {
-    if (!mapRef.current || locations.length === 0) return;
+    if (!mapReady || !mapRef.current || locations.length === 0) {
+      return;
+    }
 
     // Create a set of visible event IDs for faster lookup
     const visibleEventIds = new Set(memoizedEventIdsStr ? memoizedEventIdsStr.split(',') : []);
-
-    // Log detailed information for debugging
 
     import('leaflet').then((leafletModule) => {
       const L = leafletModule.default;
 
       try {
         // Clear existing markers - ALWAYS do this
-        const existingMarkersCount = markersRef.current.size;
         markersRef.current.forEach((marker) => {
           try {
             mapRef.current.removeLayer(marker);
@@ -228,8 +247,9 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
         });
         markersRef.current.clear();
 
-        // If no visible events, we're done - don't add any markers
-        if (visibleEventIds.size === 0) {
+        // If editing location or no visible events, don't add regular markers
+        // In edit mode, only the editing marker should be shown
+        if (visibleEventIds.size === 0 || isEditingLocation) {
           return;
         }
 
@@ -240,7 +260,6 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
         // Add markers only for visible events
         locations.forEach((location) => {
           // Only show markers for events that are currently visible
-          // Debug: log what we're checking
           if (!visibleEventIds.has(location.event_id)) {
             skippedCount++;
             return;
@@ -302,6 +321,11 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
                 'war_regional': '#ef4444',
                 'genocide': '#f87171',
                 'terrorism': '#fca5a5',
+                'battle': '#991b1b',
+                'battle_land': '#7f1d1d',
+                'battle_naval': '#b91c1c',
+                'battle_siege': '#dc2626',
+                'battle_general': '#ef4444',
                 'government_system': '#374151',
                 'revolution_uprising': '#6b7280',
                 'treaty_diplomacy': '#9ca3af',
@@ -382,16 +406,7 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
               icon,
             }).addTo(mapRef.current);
 
-            // Add popup with event info
-            const popupContent = `
-              <div style="font-size: 12px; width: 150px;">
-                <strong>${location.event_title}</strong>
-                <br><small>${event?.formatted_time || ''}</small>
-              </div>
-            `;
-            marker.bindPopup(popupContent);
-
-            // Add click handler to open event details modal
+            // Add click handler to open event details modal (no popup - modal is enough)
             marker.on('click', () => {
               if (event && onEventClick) {
                 onEventClick(event);
@@ -403,15 +418,32 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
             addedCount++;
           }
         });
+
+        // Fit map bounds to show all markers
+        // Always fit to show all visible markers (unless editing location)
+        if (markersRef.current.size > 0 && !isEditingLocation) {
+          const bounds = L.latLngBounds([]);
+          markersRef.current.forEach((marker) => {
+            bounds.extend(marker.getLatLng());
+          });
+
+          // Fit bounds to show all visible markers
+          mapRef.current.fitBounds(bounds, {
+            padding: [50, 50], // Add padding around the bounds
+            maxZoom: markersRef.current.size === 1 ? 8 : 10, // Less zoom for single markers
+            animate: true,
+            duration: 0.5,
+          });
+        }
       } catch (err) {
         console.error('Error adding markers:', err);
       }
     });
-  }, [locations, memoizedEventIdsStr]);
+  }, [locations, memoizedEventIdsStr, editingEventLocation, isEditingLocation, mapReady, events, selectedEvent]);
 
-  // Handle selected event highlighting
+  // Handle selected event highlighting and map centering
   useEffect(() => {
-    if (!selectedEvent || !mapRef.current) return;
+    if (!mapRef.current || isEditingLocation) return;
 
     // Reset all markers to default color
     markersRef.current.forEach((marker) => {
@@ -421,17 +453,98 @@ export default function GeoMap({ events, selectedEvent, onEventClick }: GeoMapPr
       }
     });
 
-    // Highlight selected event's marker
-    const selectedMarker = markersRef.current.get(selectedEvent.id);
+    if (!selectedEvent) return;
+
+    // Find the location for this event to get the correct marker
+    const eventLocation = locations.find(loc => loc.event_id === selectedEvent.id);
+    if (!eventLocation) return;
+
+    // Highlight selected event's marker using location.id (not event.id)
+    const selectedMarker = markersRef.current.get(eventLocation.id);
     if (selectedMarker) {
       const iconElement = selectedMarker.getElement();
       if (iconElement) {
         iconElement.style.filter = 'drop-shadow(0 0 8px rgba(59, 130, 246, 0.8))';
       }
-      // Pan to the marker
-      mapRef.current.setView(selectedMarker.getLatLng(), mapRef.current.getZoom());
+      // Don't center - let auto-fit bounds handle showing all markers
     }
-  }, [selectedEvent]);
+  }, [selectedEvent, isEditingLocation, locations]);
+
+  // Handle editing location marker rendering
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    // Remove old editing marker if it exists
+    if (editingMarkerRef.current) {
+      try {
+        mapRef.current.removeLayer(editingMarkerRef.current);
+      } catch (err) {
+        console.warn('Error removing editing marker:', err);
+      }
+      editingMarkerRef.current = null;
+    }
+
+    // If we're NOT editing, we're done
+    if (!isEditingLocation) {
+      return;
+    }
+
+    // If we have an editing location with coordinates, show the marker
+    if (editingEventLocation && typeof editingEventLocation.lat === 'number' && typeof editingEventLocation.lng === 'number') {
+      import('leaflet').then((leafletModule) => {
+        const L = leafletModule.default;
+
+        if (!mapRef.current) return;
+
+        try {
+          // Create a distinctive editing marker (yellow/gold color with checkmark)
+          const editingIcon = L.divIcon({
+            html: `
+              <svg xmlns="http://www.w3.org/2000/svg" width="30" height="42" viewBox="0 0 30 42">
+                <path d="M15,42C15,42 0,30 0,22 A 15 15 0 0 1 15 7 A 15 15 0 0 1 30 22 C 30 30 15 42 15 42 Z" fill="#eab308" stroke="white" stroke-width="2"/>
+                <g transform="translate(15, 20)" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="-3,0 2,5 5,-2"/>
+                </g>
+              </svg>
+            `,
+            iconSize: [30, 42],
+            iconAnchor: [15, 42],
+            popupAnchor: [0, -10],
+            className: 'leaflet-marker-editing',
+          });
+
+          // Create marker with draggable enabled
+          editingMarkerRef.current = L.marker(
+            [editingEventLocation.lat, editingEventLocation.lng],
+            {
+              icon: editingIcon,
+              title: 'Drag to move',
+              draggable: true
+            }
+          );
+
+          // Handle marker drag - update coordinates in real-time
+          editingMarkerRef.current.on('dragend', (e: any) => {
+            const latlng = e.target.getLatLng();
+            if (onMapClick) {
+              onMapClick(latlng.lat, latlng.lng);
+            }
+          });
+
+          // Add to map
+          editingMarkerRef.current.addTo(mapRef.current);
+
+          // Zoom in for detailed view
+          mapRef.current.setView(
+            [editingEventLocation.lat, editingEventLocation.lng],
+            14
+          );
+        } catch (err) {
+          console.error('Error creating editing marker:', err);
+        }
+      });
+    }
+  }, [editingEventLocation, onMapClick, isEditingLocation]);
 
   return (
     <div className="h-full flex flex-col bg-gray-800 border-l border-gray-700">

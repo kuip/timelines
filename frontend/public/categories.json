@@ -297,6 +297,38 @@
           "name": "Terrorism",
           "description": "Terrorist attacks, terrorism emergence",
           "color": "#fca5a5"
+        },
+        {
+          "id": "battle",
+          "name": "Battles & Warfare",
+          "description": "Battles, military campaigns, sieges, naval battles",
+          "color": "#991b1b",
+          "children": [
+            {
+              "id": "battle_land",
+              "name": "Land Battles",
+              "description": "Land battles, ground warfare, military campaigns",
+              "color": "#7f1d1d"
+            },
+            {
+              "id": "battle_naval",
+              "name": "Naval Battles",
+              "description": "Naval battles, sea warfare, naval campaigns",
+              "color": "#b91c1c"
+            },
+            {
+              "id": "battle_siege",
+              "name": "Sieges",
+              "description": "Sieges, fortifications, siege warfare",
+              "color": "#dc2626"
+            },
+            {
+              "id": "battle_general",
+              "name": "General Battles",
+              "description": "General battles, skirmishes, military engagements",
+              "color": "#ef4444"
+            }
+          ]
         }
       ]
     },

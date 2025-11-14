@@ -67,6 +67,9 @@ interface EventDetailModalProps {
   onClose: () => void;
   onEventUpdate?: (updatedEvent: EventResponse) => void;
   onTimelineClick?: (unixSeconds: number) => void;
+  onShiftClickImage?: (linkedEvent: EventResponse) => void;
+  onEditingLocationModeChange?: (enabled: boolean) => void;
+  canEdit?: boolean;
 }
 
 interface FormData {
@@ -77,14 +80,20 @@ interface FormData {
   precision_level: string;
   image_url: string;
   related_event_ids: string[];
+  location_latitude?: number;
+  location_longitude?: number;
+  location_name?: string;
 }
 
 export interface EventDetailModalHandle {
   updateUnixSeconds: (unixSeconds: number) => void;
+  addLinkedEvent: (linkedEventId: string) => void;
+  updateLocationCoordinates: (lat: number, lng: number) => void;
+  setEditingLocationMode: (enabled: boolean) => void;
 }
 
 const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailModalProps>(
-  ({ event, events, isOpen, onClose, onEventUpdate }, ref) => {
+  ({ event, events, isOpen, onClose, onEventUpdate, onShiftClickImage, onEditingLocationModeChange, canEdit = false }, ref) => {
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -101,7 +110,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
       related_event_ids: [],
     });
 
-    // Expose method to update unix_seconds from timeline clicks
+    // Expose method to update unix_seconds from timeline clicks and add linked events
     React.useImperativeHandle(ref, () => ({
       updateUnixSeconds: (unixSeconds: number) => {
         setFormData((prev) => ({
@@ -109,20 +118,120 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
           unix_seconds: unixSeconds,
         }));
       },
+      addLinkedEvent: (linkedEventId: string) => {
+        setFormData((prev) => {
+          if (!prev.related_event_ids.includes(linkedEventId)) {
+            return {
+              ...prev,
+              related_event_ids: [...prev.related_event_ids, linkedEventId],
+            };
+          }
+          return prev;
+        });
+      },
+      updateLocationCoordinates: (lat: number, lng: number) => {
+        setFormData((prev) => ({
+          ...prev,
+          location_latitude: lat,
+          location_longitude: lng,
+        }));
+      },
+      setEditingLocationMode: (enabled: boolean) => {
+        // This is called from parent to enable/disable location editing mode
+        // The actual logic is in the parent component
+      },
     }));
+
+    // Notify parent when editing mode changes
+    useEffect(() => {
+      if (onEditingLocationModeChange) {
+        onEditingLocationModeChange(isEditing);
+      }
+    }, [isEditing, onEditingLocationModeChange]);
 
     // Initialize form data when event changes
     useEffect(() => {
       if (event) {
-        setFormData({
+        setFormData((prev) => ({
+          ...prev,
           title: event.title || '',
           description: event.description || '',
           category: event.category || 'contemporary',
           unix_seconds: event.unix_seconds || 0,
           precision_level: event.precision_level || 'second',
           image_url: event.image_url || '',
-          related_event_ids: event.related_event_id ? [event.related_event_id] : [],
-        });
+        }));
+
+        // Fetch relationships and locations if this is an existing event
+        if (event.id !== 'new') {
+          const fetchEventData = async () => {
+            try {
+              // Try to get API URL from settings first, fallback to environment variable
+              let apiUrl = 'http://localhost:8080';
+              try {
+                const settingsResponse = await fetch('/settings.json?t=' + Date.now());
+                if (settingsResponse.ok) {
+                  const settings = await settingsResponse.json();
+                  if (settings.api_url) {
+                    apiUrl = settings.api_url;
+                  }
+                }
+              } catch (e) {
+                // Fall through to default
+              }
+
+              apiUrl = apiUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+
+              // Fetch relationships
+              console.log('Fetching relationships for event', event.id, 'from', apiUrl);
+              const relResponse = await fetch(`${apiUrl}/api/events/${event.id}/relationships`);
+              if (relResponse.ok) {
+                const data = await relResponse.json();
+                // Deduplicate related event IDs using a Set
+                const relatedIdsSet = new Set(
+                  data.relationships?.map((rel: any) => {
+                    // Get the other event ID from the relationship
+                    return rel.event_id_a === event.id ? rel.event_id_b : rel.event_id_a;
+                  }) || []
+                );
+                const relatedIds = Array.from(relatedIdsSet) as string[];
+                console.log('Found related events:', relatedIds);
+                setFormData((prev) => ({
+                  ...prev,
+                  related_event_ids: relatedIds,
+                }));
+              } else {
+                console.warn('Failed to fetch relationships, status:', relResponse.status);
+              }
+
+              // Fetch locations (with cache busting to ensure fresh data)
+              console.log('Fetching locations for event', event.id);
+              const locResponse = await fetch(`${apiUrl}/api/events/${event.id}/locations?t=${Date.now()}`);
+              if (locResponse.ok) {
+                const locData = await locResponse.json();
+                if (locData.locations && locData.locations.length > 0) {
+                  const primaryLocation = locData.locations.find((loc: any) => loc.is_primary) || locData.locations[0];
+                  if (primaryLocation && primaryLocation.geojson?.type === 'Point') {
+                    const [lng, lat] = primaryLocation.geojson.coordinates;
+                    console.log('Found location:', { lat, lng });
+                    setFormData((prev) => ({
+                      ...prev,
+                      location_latitude: lat,
+                      location_longitude: lng,
+                      location_name: primaryLocation.location_name || '',
+                    }));
+                  }
+                }
+              } else {
+                console.warn('Failed to fetch locations, status:', locResponse.status);
+              }
+            } catch (err) {
+              console.warn('Failed to fetch event data:', err);
+            }
+          };
+          fetchEventData();
+        }
+
         // Auto-enter edit mode for new events
         setIsEditing(event.id === 'new');
       }
@@ -187,6 +296,56 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
             image_url: formData.image_url,
             related_event_ids: formData.related_event_ids,
           });
+        }
+
+        // If location coordinates were edited, save them
+        if (formData.location_latitude && formData.location_longitude) {
+          try {
+            // Get API URL from settings first
+            let apiUrl = 'http://localhost:8080';
+            try {
+              const settingsResponse = await fetch('/settings.json?t=' + Date.now());
+              if (settingsResponse.ok) {
+                const settings = await settingsResponse.json();
+                if (settings.api_url) {
+                  apiUrl = settings.api_url;
+                }
+              }
+            } catch (e) {
+              // Fall through to default
+            }
+
+            const locationResponse = await fetch(`${apiUrl}/api/events/${savedEvent.id}/locations/primary`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                latitude: formData.location_latitude,
+                longitude: formData.location_longitude,
+                location_name: formData.location_name || '',
+              }),
+            });
+
+            if (!locationResponse.ok) {
+              console.warn('Failed to save location, but event was saved');
+            } else {
+              console.log('Location saved successfully');
+              // Fetch the updated location data to refresh the cache
+              try {
+                const updatedLocResponse = await fetch(`${apiUrl}/api/events/${savedEvent.id}/locations`);
+                if (updatedLocResponse.ok) {
+                  const locData = await updatedLocResponse.json();
+                  console.log('Refreshed location cache:', locData);
+                }
+              } catch (err) {
+                console.warn('Failed to refresh location cache:', err);
+              }
+            }
+          } catch (locError) {
+            console.warn('Failed to save location:', locError);
+            // Don't fail the entire save, location is secondary
+          }
         }
 
         onEventUpdate?.(savedEvent);
@@ -318,8 +477,8 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
 
           {/* Content - scrollable */}
           <div className="overflow-y-auto flex-1">
-            {/* Image - shown first at full width */}
-            {currentEvent.image_url && (
+            {/* Image - shown first at full width ONLY in view mode */}
+            {!isEditing && currentEvent.image_url && (
               <div className="w-full bg-gray-900">
                 <img
                   src={currentEvent.image_url}
@@ -512,26 +671,75 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       Image URL
                     </label>
-                    <input
-                      type="text"
-                      value={formData.image_url}
-                      onChange={(e) =>
-                        setFormData({ ...formData, image_url: e.target.value })
-                      }
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
-                      placeholder="https://example.com/image.jpg"
-                    />
+                    <div className="flex gap-2 items-end">
+                      <input
+                        type="text"
+                        value={formData.image_url}
+                        onChange={(e) =>
+                          setFormData({ ...formData, image_url: e.target.value })
+                        }
+                        className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                        placeholder="https://example.com/image.jpg"
+                      />
+                      {formData.image_url && (
+                        <img
+                          src={formData.image_url}
+                          alt="Preview"
+                          className="w-12 h-12 rounded border border-gray-600 object-contain bg-gray-900 flex-shrink-0"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Geolocation */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Geolocation
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Latitude</label>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={formData.location_latitude || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, location_latitude: e.target.value ? parseFloat(e.target.value) : undefined })
+                          }
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                          placeholder="-90 to 90"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-400 mb-1">Longitude</label>
+                        <input
+                          type="number"
+                          step="0.0001"
+                          value={formData.location_longitude || ''}
+                          onChange={(e) =>
+                            setFormData({ ...formData, location_longitude: e.target.value ? parseFloat(e.target.value) : undefined })
+                          }
+                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                          placeholder="-180 to 180"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2">Click on the map behind this modal to set coordinates</p>
                   </div>
 
                   {/* Linked Events */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Linked Events
+                      Linked Events {formData.related_event_ids.length > 0 && `(${formData.related_event_ids.length})`}
                     </label>
+                    <p className="text-xs text-gray-400 mb-2">Shift-click event images to add linked events</p>
 
                     {/* Currently linked events */}
-                    {formData.related_event_ids.length > 0 && (
-                      <div className="space-y-2 mb-3">
+                    {formData.related_event_ids.length > 0 ? (
+                      <div className="space-y-2">
                         {formData.related_event_ids.map((linkedId) => {
                           const linkedEvent = getRelatedEventById(linkedId);
                           return linkedEvent ? (
@@ -545,32 +753,17 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                               </div>
                               <button
                                 onClick={() => handleRemoveLinkedEvent(linkedId)}
-                                className="ml-2 px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded font-bold transition"
+                                className="ml-2 px-2.5 py-1 bg-red-600 hover:bg-red-700 text-white text-base rounded transition font-bold"
                               >
-                                −
+                                ×
                               </button>
                             </div>
                           ) : null;
                         })}
                       </div>
+                    ) : (
+                      <p className="text-sm text-gray-400 italic">No linked events yet</p>
                     )}
-
-                    {/* Available events to link */}
-                    <p className="text-xs text-gray-400 mb-2">Click to add linked events:</p>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {events
-                        .filter((e) => e.id !== event.id && !formData.related_event_ids.includes(e.id))
-                        .map((e) => (
-                          <button
-                            key={e.id}
-                            onClick={() => handleAddLinkedEvent(e.id)}
-                            className="w-full p-2 text-left bg-gray-700 hover:bg-gray-600 rounded text-sm transition"
-                          >
-                            <p className="text-white font-medium">{e.title}</p>
-                            <p className="text-xs text-gray-400">{e.formatted_time}</p>
-                          </button>
-                        ))}
-                    </div>
                   </div>
                 </div>
               ) : (
@@ -603,6 +796,29 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                     <div>
                       <h3 className="text-sm font-semibold text-gray-400">Description</h3>
                       <p className="text-gray-300">{currentEvent.description}</p>
+                    </div>
+                  )}
+
+                  {/* Sources */}
+                  {currentEvent.sources && currentEvent.sources.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-400 mb-2">Sources</h3>
+                      <div className="space-y-1">
+                        {currentEvent.sources.map((source) => (
+                          source.url ? (
+                            <a
+                              key={source.id}
+                              href={source.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block text-sm text-blue-400 hover:text-blue-300 underline"
+                              title={source.url}
+                            >
+                              📖 {source.title || source.source_type}
+                            </a>
+                          ) : null
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -670,40 +886,48 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
 
           {/* Footer */}
           <div className="px-6 py-4 border-t border-gray-700 flex justify-between gap-3 flex-shrink-0">
-            <button
-              onClick={handleDelete}
-              disabled={isDeleting || isSaving}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isDeleting ? 'Deleting...' : 'Delete'}
-            </button>
-            <div className="flex gap-3">
-              {isEditing ? (
-                <div style={{ display: 'contents' }}>
-                  <button
-                    onClick={handleCancel}
-                    disabled={isSaving}
-                    className="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={isSaving}
-                    className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {isSaving ? 'Saving...' : 'Save'}
-                  </button>
-                </div>
-              ) : (
+            {canEdit ? (
+              <>
                 <button
-                  onClick={() => setIsEditing(true)}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                  onClick={handleDelete}
+                  disabled={isDeleting || isSaving}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Edit
+                  {isDeleting ? 'Deleting...' : 'Delete'}
                 </button>
-              )}
-            </div>
+                <div className="flex gap-3">
+                  {isEditing ? (
+                    <div style={{ display: 'contents' }}>
+                      <button
+                        onClick={handleCancel}
+                        disabled={isSaving}
+                        className="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isSaving ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setIsEditing(true)}
+                      className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                    >
+                      Edit
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-gray-400 flex items-center">
+                Only Twitter verified users can edit events
+              </div>
+            )}
           </div>
         </div>
       </div>
