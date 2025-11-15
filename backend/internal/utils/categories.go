@@ -1,10 +1,8 @@
 package utils
 
 import (
-	"encoding/json"
+	"database/sql"
 	"log"
-	"os"
-	"path/filepath"
 )
 
 type CategoryMetadata struct {
@@ -30,44 +28,91 @@ type CategoriesConfig struct {
 
 var validCategories map[string]CategoryMetadata
 var categoriesTree []CategoryGroup
+var db *sql.DB
 
 func init() {
 	validCategories = make(map[string]CategoryMetadata)
-	loadCategories()
 }
 
-func loadCategories() {
-	// Try to load from config file
-	configPath := os.Getenv("CATEGORIES_CONFIG_PATH")
-	if configPath == "" {
-		// Default path relative to binary
-		configPath = filepath.Join("config", "categories.json")
+// SetDB sets the database connection for loading categories
+func SetDB(database *sql.DB) {
+	db = database
+	loadCategoriesFromDB()
+}
+
+func loadCategoriesFromDB() {
+	if db == nil {
+		log.Printf("Warning: Database not set, cannot load categories")
+		populateDefaultCategories()
+		return
 	}
 
-	data, err := os.ReadFile(configPath)
+	// Query all categories from database
+	rows, err := db.Query(`
+		SELECT id, name, description, color, icon, parent_id
+		FROM categories
+		ORDER BY parent_id NULLS FIRST, id
+	`)
 	if err != nil {
-		log.Printf("Warning: Could not load categories config from %s: %v", configPath, err)
-		// Provide default categories in case file is not found
+		log.Printf("Warning: Could not load categories from database: %v", err)
 		populateDefaultCategories()
 		return
 	}
+	defer rows.Close()
 
-	var config CategoriesConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		log.Printf("Warning: Could not parse categories config: %v", err)
-		populateDefaultCategories()
-		return
-	}
+	// Build tree structure
+	parents := make(map[string]*CategoryGroup)
+	children := make(map[string][]CategoryMetadata)
 
-	// Store full tree structure
-	categoriesTree = config.Categories
+	for rows.Next() {
+		var id, name, description, color string
+		var icon sql.NullString
+		var parentID sql.NullString
 
-	// Flatten categories for validation lookups
-	for _, group := range config.Categories {
-		for _, child := range group.Children {
-			validCategories[child.ID] = child
+		if err := rows.Scan(&id, &name, &description, &color, &icon, &parentID); err != nil {
+			log.Printf("Error scanning category row: %v", err)
+			continue
+		}
+
+		iconStr := ""
+		if icon.Valid {
+			iconStr = icon.String
+		}
+
+		if !parentID.Valid {
+			// This is a parent category
+			parents[id] = &CategoryGroup{
+				ID:          id,
+				Name:        name,
+				Description: description,
+				Color:       color,
+				Icon:        iconStr,
+				Children:    []CategoryMetadata{},
+			}
+		} else {
+			// This is a child category
+			child := CategoryMetadata{
+				ID:          id,
+				Name:        name,
+				Description: description,
+				Color:       color,
+				Icon:        iconStr,
+			}
+			children[parentID.String] = append(children[parentID.String], child)
+			validCategories[id] = child
 		}
 	}
+
+	// Build final tree
+	categoriesTree = []CategoryGroup{}
+	for _, parent := range parents {
+		if childList, ok := children[parent.ID]; ok {
+			parent.Children = childList
+		}
+		categoriesTree = append(categoriesTree, *parent)
+	}
+
+	log.Printf("Loaded %d parent categories and %d child categories from database", len(parents), len(validCategories))
 }
 
 func populateDefaultCategories() {

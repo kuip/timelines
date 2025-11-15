@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { Roboto_Condensed } from 'next/font/google'
+import { ThemeProvider } from '@/lib/ThemeProvider'
 
 const robotoCondensed = Roboto_Condensed({
   subsets: ['latin'],
@@ -19,11 +20,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={robotoCondensed.className}>
+    <html lang="en" className={robotoCondensed.className} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
             __html: `
+              // Load API config
               (async () => {
                 try {
                   const response = await fetch('/settings.json');
@@ -38,7 +40,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body>{children}</body>
+      <body suppressHydrationWarning>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   )
 }

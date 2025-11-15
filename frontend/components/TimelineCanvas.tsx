@@ -253,8 +253,9 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     // Scale context for DPR
     ctx.scale(dpr, dpr);
 
-    // Clear
-    ctx.fillStyle = '#111827';
+    // Clear - use theme-aware background color
+    const isDark = document.documentElement.classList.contains('dark');
+    ctx.fillStyle = isDark ? '#111827' : '#ffffff';
     ctx.fillRect(0, 0, dimensions.width, dimensions.height);
 
     // Performance guard
@@ -279,7 +280,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
     // Draw timeline line in two parts: normal opacity for past, reduced for future
     // Draw the full line from Big Bang to Now, clipping to screen bounds
-    ctx.strokeStyle = '#d1d5db';
+    ctx.strokeStyle = isDark ? '#d1d5db' : '#4b5563';
     ctx.lineWidth = 2;
 
     // Past portion (from Big Bang to Now) - normal opacity
@@ -307,7 +308,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     // Draw arc for all past: from Now to Big Bang at the edge of canvas (4px inset)
     const arcRadius = 30;
     const edgeX = 4;
-    ctx.strokeStyle = 'rgba(155, 160, 163, 0.5)';
+    ctx.strokeStyle = isDark ? 'rgba(155, 160, 163, 0.5)' : 'rgba(75, 85, 99, 0.5)';
     ctx.lineWidth = 2;
     ctx.globalAlpha = 0.8;
 
@@ -558,9 +559,9 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
     // Images are now rendered in HTML cards in EventPanel instead of canvas
 
-    // Draw arrow pointing up at NOW on the timeline (same color as timeline, peak at nowY)
+    // Draw arrow pointing up at NOW on the timeline (gray color matching now.svg icon)
     const arrowSize = 10.67; // 16 / 1.5 for 1.5x smaller
-    ctx.fillStyle = '#d1d5db'; // same color as main timeline
+    ctx.fillStyle = '#808080'; // same color as now.svg icon
     ctx.beginPath();
     ctx.moveTo(timelineX, nowY - 2); // arrow point (peak at now, 2px up)
     ctx.lineTo(timelineX - arrowSize / 2, nowY + arrowSize - 2); // left base
@@ -569,7 +570,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     ctx.fill();
 
     // Draw extremity labels last (on top of everything)
-    drawExtremityLabels(ctx, topLabel, bottomLabel, dimensions);
+    drawExtremityLabels(ctx, topLabel, bottomLabel, dimensions, isDark);
   }, [dimensions, events, transform, imagesLoaded, currentTime, START_TIME, END_TIME, JSON.stringify(relationships)]);
 
   // Handle zoom/pan - use state updater function and query canvas dimensions on demand
@@ -732,7 +733,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-gray-900 relative">
+    <div ref={containerRef} className="w-full h-full bg-white dark:bg-gray-900 relative">
       <canvas
         ref={canvasRef}
         className="block w-full h-full cursor-crosshair"

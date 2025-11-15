@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { EventResponse } from '@/types';
+import { useTheme } from '@/lib/ThemeProvider';
 
 interface EventLocation {
   id: string;
@@ -25,6 +26,7 @@ interface GeoMapProps {
 }
 
 export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick, editingEventLocation, isEditingLocation }: GeoMapProps) {
+  const { theme } = useTheme();
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
   const [locations, setLocations] = useState<EventLocation[]>([]);
@@ -167,6 +169,41 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
     link.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
     document.head.appendChild(link);
 
+    // Add custom theme CSS
+    const isDark = theme === 'dark';
+    const style = document.createElement('style');
+    style.textContent = `
+      .leaflet-container {
+        background: ${isDark ? '#111827' : '#f3f4f6'} !important;
+      }
+      .leaflet-control-attribution {
+        background: ${isDark ? 'rgba(17, 24, 39, 0.8)' : 'rgba(255, 255, 255, 0.8)'} !important;
+        color: ${isDark ? '#9ca3af' : '#4b5563'} !important;
+      }
+      .leaflet-control-attribution a {
+        color: ${isDark ? '#d1d5db' : '#1f2937'} !important;
+      }
+      .leaflet-control-zoom a {
+        background: ${isDark ? '#1f2937' : '#ffffff'} !important;
+        color: ${isDark ? '#d1d5db' : '#1f2937'} !important;
+        border-bottom-color: ${isDark ? '#374151' : '#e5e7eb'} !important;
+      }
+      .leaflet-control-zoom a:hover {
+        background: ${isDark ? '#374151' : '#f3f4f6'} !important;
+      }
+      .leaflet-bar {
+        border: 1px solid ${isDark ? '#374151' : '#e5e7eb'} !important;
+      }
+      .leaflet-popup-content-wrapper {
+        background: ${isDark ? '#1f2937' : '#ffffff'} !important;
+        color: ${isDark ? '#d1d5db' : '#1f2937'} !important;
+      }
+      .leaflet-popup-tip {
+        background: ${isDark ? '#1f2937' : '#ffffff'} !important;
+      }
+    `;
+    document.head.appendChild(style);
+
     // Import Leaflet only on client-side
     import('leaflet').then((leafletModule) => {
       const L = leafletModule.default;
@@ -187,11 +224,30 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
         const map = L.map(mapContainer.current).setView([20, 0], 2);
         mapRef.current = map;
 
-        // Add OpenStreetMap tiles
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenStreetMap contributors',
-          maxZoom: 19,
-        }).addTo(map);
+        // Use standard OSM tiles with borders and invert for dark mode
+        if (theme === 'dark') {
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19,
+            className: 'map-tiles',
+          }).addTo(map);
+
+          // Add CSS to invert colors for dark mode
+          const tileStyle = document.createElement('style');
+          tileStyle.id = 'map-tile-invert';
+          tileStyle.textContent = `
+            .map-tiles {
+              filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
+            }
+          `;
+          document.head.appendChild(tileStyle);
+        } else {
+          // Light mode - use standard OSM tiles
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19,
+          }).addTo(map);
+        }
 
         // Add map click handler for geolocation editing
         map.on('click', (e: any) => {
@@ -547,20 +603,20 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
   }, [editingEventLocation, onMapClick, isEditingLocation]);
 
   return (
-    <div className="h-full flex flex-col bg-gray-800 border-l border-gray-700">
-      <div className="bg-gray-700 px-4 py-2 border-b border-gray-600">
+    <div className="h-full flex flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800">
+      <div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700">
         <h2 className="text-sm font-semibold">Geolocation Map</h2>
-        {loading && <p className="text-xs text-gray-400">Loading locations...</p>}
-        {error && <p className="text-xs text-red-400">{error}</p>}
+        {loading && <p className="text-xs text-gray-500 dark:text-gray-400">Loading locations...</p>}
+        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
         {!loading && !error && (
-          <p className="text-xs text-gray-400">{locations.length} location{locations.length !== 1 ? 's' : ''}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{locations.length} location{locations.length !== 1 ? 's' : ''}</p>
         )}
       </div>
 
       <div
         ref={mapContainer}
-        className="flex-1"
-        style={{ minHeight: 0 }}
+        className="flex-1 bg-gray-100 dark:bg-gray-900"
+        style={{ minHeight: 0, backgroundColor: theme === 'dark' ? '#111827' : '#f3f4f6' }}
       />
     </div>
   );

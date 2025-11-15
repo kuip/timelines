@@ -134,11 +134,13 @@ export const drawExtremityLabels = (
   ctx: CanvasRenderingContext2D,
   topLabel: string,
   bottomLabel: string,
-  dimensions: { width: number; height: number }
+  dimensions: { width: number; height: number },
+  isDark: boolean = true
 ) => {
   // Ensure full opacity for extremity labels
   ctx.globalAlpha = 1;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  // Use dark text for light mode, light text for dark mode
+  ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.9)' : 'rgba(31, 41, 55, 0.9)';
   ctx.font = 'bold 16px "Roboto Condensed", sans-serif';
   ctx.textAlign = 'right';
 

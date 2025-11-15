@@ -132,18 +132,35 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
 
   // Track panel height for coordinate calculations (full panel height)
   useEffect(() => {
+    if (!panelRef.current) return;
+
     const updateDimensions = () => {
       if (!panelRef.current) return;
 
       const newHeight = panelRef.current.clientHeight;
+      console.log('EventPanel: updateDimensions called, clientHeight=', newHeight);
       setDimensions({
         height: newHeight,
       });
     };
 
+    // Use ResizeObserver for more reliable dimension tracking
+    const resizeObserver = new ResizeObserver(() => {
+      updateDimensions();
+    });
+
+    resizeObserver.observe(panelRef.current);
+
+    // Initial update
     updateDimensions();
+
+    // Also update on window resize
     window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
+
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener('resize', updateDimensions);
+    };
   }, []);
 
   // Update current time every 100ms for smooth updates
@@ -187,7 +204,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
     unix_seconds: realNowSeconds,
     formatted_time: getFormattedNowTime(),
     category: 'contemporary' as const,
-    image_url: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"%3E%3Ccircle cx="50" cy="50" r="45" fill="%23ec4899" stroke="%23ffffff" stroke-width="2"/%3E%3Cline x1="50" y1="15" x2="50" y2="30" stroke="%23ffffff" stroke-width="3" stroke-linecap="round"/%3E%3Cline x1="50" y1="70" x2="50" y2="85" stroke="%23ffffff" stroke-width="3" stroke-linecap="round"/%3E%3Cline x1="15" y1="50" x2="30" y2="50" stroke="%23ffffff" stroke-width="3" stroke-linecap="round"/%3E%3Cline x1="70" y1="50" x2="85" y2="50" stroke="%23ffffff" stroke-width="3" stroke-linecap="round"/%3E%3Cline x1="50" y1="50" x2="50" y2="65" stroke="%23ffffff" stroke-width="2"/%3E%3Cline x1="50" y1="50" x2="65" y2="50" stroke="%23ffffff" stroke-width="2"/%3E%3C/svg%3E',
+    image_url: '/images/categories/now.svg',
   } as unknown as EventResponse;
 
   // Create Future Horizon event
@@ -214,6 +231,8 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
   const displayableEvents = useMemo(() => {
     const START_TIME = -435494878264400000;
 
+    console.log('EventPanel: visibleEvents=', visibleEvents.length, 'dimensions.height=', dimensions.height);
+
     // Filter visible events to exclude those beyond Future Horizon
     const filteredVisibleEvents = visibleEvents.filter((event) => {
       const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
@@ -234,6 +253,8 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
       allVisibleEvents.push(futureHorizonEvent);
     }
 
+    console.log('EventPanel: allVisibleEvents=', allVisibleEvents.length);
+
     if (allVisibleEvents.length === 0) return [];
 
     const positions = allVisibleEvents.map((event) => ({
@@ -242,25 +263,63 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
     })).sort((a, b) => a.y - b.y);
 
     const displayableIds = getDisplayableEvents(positions, dimensions.height);
-    return positions.filter(({ event }) => displayableIds.has(event.id)).map(({ event }) => event);
+    const result = positions.filter(({ event }) => displayableIds.has(event.id)).map(({ event }) => event);
+    console.log('EventPanel: displayableEvents=', result.length);
+    return result;
   }, [visibleEventIdsStr, dimensions.height]);
 
-  // Notify parent of displayed events (for GeoMap) - only if the IDs actually changed
-  // This prevents refetching location/relationship data when the same cards are displayed
+  // Calculate which events will actually be rendered (not just displayable)
+  const actuallyRenderedEvents = useMemo(() => {
+    const cardHeight = cardHeightPx ?? 100;
+    const cardPadding = cardViewportPaddingPx ?? 0;
+
+    return displayableEvents
+      .map((event) => {
+        const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
+        const eventY = getEventY(unixSeconds);
+        return { event, eventY };
+      })
+      .sort((a, b) => a.eventY - b.eventY)
+      .filter(({ eventY }, index, sorted) => {
+        // Viewport culling - skip cards far outside viewport
+        if (eventY < -cardHeight - cardPadding || eventY > (dimensions.height || 800) + cardHeight + cardPadding) {
+          return false;
+        }
+
+        // Calculate available space
+        let availableSpace: number;
+        if (index < sorted.length - 1) {
+          availableSpace = sorted[index + 1].eventY - eventY;
+        } else {
+          availableSpace = (dimensions.height - 40) - eventY;
+        }
+
+        // Skip if not enough space
+        const minHeightNeeded = 24;
+        if (availableSpace < minHeightNeeded) {
+          return false;
+        }
+
+        return true;
+      })
+      .map(({ event }) => event);
+  }, [displayableEvents, dimensions.height, cardHeightPx, cardViewportPaddingPx, getEventY]);
+
+  // Notify parent of ACTUALLY RENDERED events (for GeoMap) - only if the IDs actually changed
   useEffect(() => {
-    if (onDisplayedEventsChange && displayableEvents.length > 0) {
-      const displayableIds = displayableEvents.map(e => e.id).join(',');
-      if (displayableIds !== prevDisplayableIdsRef.current) {
-        prevDisplayableIdsRef.current = displayableIds;
-        onDisplayedEventsChange(displayableEvents);
+    if (onDisplayedEventsChange) {
+      const renderedIds = actuallyRenderedEvents.map(e => e.id).join(',');
+      if (renderedIds !== prevDisplayableIdsRef.current) {
+        prevDisplayableIdsRef.current = renderedIds;
+        onDisplayedEventsChange(actuallyRenderedEvents);
       }
     }
-  }, [displayableEvents, onDisplayedEventsChange]);
+  }, [actuallyRenderedEvents, onDisplayedEventsChange]);
 
   return (
     <div
       ref={panelRef}
-      className="h-full bg-gray-900 text-gray-100 flex flex-col relative"
+      className="h-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col relative"
       style={{ fontFamily: '"Roboto Condensed", sans-serif' }}
     >
       {/* Content - Synchronized visible events with vertical alignment */}
@@ -329,7 +388,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                   {isSpecialEvent ? (
                     // Special card for "Now" and "Future Horizon" events - same format as regular events
                     <div
-                      className="p-2 bg-gray-800 rounded border border-gray-700 cursor-pointer transition overflow-hidden flex flex-row gap-2"
+                      className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-300 dark:border-gray-700 cursor-pointer transition overflow-hidden flex flex-row gap-2"
                       style={{
                         height: '100%',
                         borderLeft: `6px solid ${getCategoryColor(event.category)}`
@@ -339,7 +398,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                       {(() => {
                         const imageUrl = event.image_url;
                         return imageUrl ? (
-                          <div className="w-20 h-20 bg-gray-900 rounded flex-shrink-0 border border-gray-600 overflow-hidden">
+                          <div className="w-20 h-20 bg-gray-200 dark:bg-gray-900 rounded flex-shrink-0 border border-gray-400 dark:border-gray-600 overflow-hidden">
                             <img
                               src={imageUrl}
                               alt={event.title}
@@ -389,13 +448,13 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                         </div>
 
                         {/* Event Title */}
-                        <h3 className="text-xs font-bold text-white flex-shrink-0">
+                        <h3 className="text-xs font-bold text-gray-900 dark:text-white flex-shrink-0">
                           {event.title}
                         </h3>
 
                         {/* Event Description */}
                         {event.description && (
-                          <p className="text-xs text-gray-300 overflow-hidden line-clamp-2">
+                          <p className="text-xs text-gray-600 dark:text-gray-300 overflow-hidden line-clamp-2">
                             {event.description}
                           </p>
                         )}
@@ -404,7 +463,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                   ) : (
                     // Regular event card - image on left, content on right
                     <div
-                      className="p-2 bg-gray-800 rounded border border-gray-700 transition overflow-hidden flex flex-row gap-2"
+                      className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-300 dark:border-gray-700 transition overflow-hidden flex flex-row gap-2"
                       style={{
                         height: '100%',
                         borderLeft: `6px solid ${getCategoryColor(event.category)}`
@@ -424,7 +483,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                                 }
                               }
                             }}
-                            className={`w-20 h-20 bg-gray-900 rounded flex-shrink-0 border border-gray-600 overflow-hidden ${imageUrl ? 'hover:border-blue-500 cursor-pointer' : ''} transition`}
+                            className={`w-20 h-20 bg-gray-200 dark:bg-gray-900 rounded flex-shrink-0 border border-gray-400 dark:border-gray-600 overflow-hidden ${imageUrl ? 'hover:border-blue-500 cursor-pointer' : ''} transition`}
                             title={imageUrl ? "Click to view | Shift+Click to link" : undefined}
                           >
                             {imageUrl && (
@@ -528,13 +587,13 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                         </div>
 
                         {/* Event Title */}
-                        <h3 className="text-xs font-bold text-white flex-shrink-0">
+                        <h3 className="text-xs font-bold text-gray-900 dark:text-white flex-shrink-0">
                           {event.title}
                         </h3>
 
                         {/* Event Description */}
                         {event.description && (
-                          <p className="text-xs text-gray-300 overflow-hidden line-clamp-2">
+                          <p className="text-xs text-gray-600 dark:text-gray-300 overflow-hidden line-clamp-2">
                             {event.description}
                           </p>
                         )}

@@ -140,7 +140,7 @@ export default function Home() {
     try {
       setLoading(true);
       const { events: data } = await eventsApi.getEvents({
-        limit: 1000,
+        limit: 10000, // Temporary: fetch all current events (will implement dynamic loading later)
         min_importance: 0,
       });
       setEvents(data);
@@ -395,28 +395,20 @@ export default function Home() {
     : events;
 
   return (
-    <main className="relative h-screen w-screen bg-gray-900 text-white flex" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
+    <main className="relative h-screen w-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white flex" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
       {/* Auth Info - Top Right */}
       <div className="absolute z-50 top-2 right-4">
         <AuthInfo />
       </div>
 
-      {/* Reset to Default Button - Matching Now Arrow with Tail */}
+      {/* Reset to Default Button - Using now.svg icon */}
       <button
         onClick={handleResetToDefault}
         className="absolute z-50 hover:opacity-80 transition-opacity"
         style={{ top: '8px', left: '8px' }}
         title="Return to default view"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="w-12 h-12">
-          <defs>
-            <filter id="roundCorners">
-              <feGaussianBlur in="SourceGraphic" stdDeviation="1.5"/>
-            </filter>
-          </defs>
-          <polygon points="40,10 22,42 58,42" fill="#d1d5db" stroke="#d1d5db" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" filter="url(#roundCorners)"/>
-          <rect x="37" y="42" width="6" height="13" rx="3" fill="#d1d5db"/>
-        </svg>
+        <img src="/images/categories/now.svg" alt="Now" className="w-12 h-12" />
       </button>
 
       {/* Canvas Timeline */}
@@ -433,7 +425,7 @@ export default function Home() {
       <div className="h-full flex-shrink-0 relative" style={{ width: `${uiConfig.mapWidthPercent}%`, zIndex: 1 }}>
         <Suspense fallback={<div className="w-full h-full flex items-center justify-center bg-gray-800"><p>Loading map...</p></div>}>
           <GeoMap
-            events={visibleEvents}
+            events={displayedCardEvents}
             selectedEvent={selectedEvent}
             onEventClick={handleEventClick}
             onMapClick={handleMapClick}

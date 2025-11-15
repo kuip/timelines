@@ -69,7 +69,7 @@ type EventQueryParams struct {
 	MinImportance   *int    `form:"min_importance"`
 
 	// Pagination
-	Limit  int `form:"limit" binding:"omitempty,min=1,max=1000"`
+	Limit  int `form:"limit" binding:"omitempty,min=1,max=100000"`
 	Offset int `form:"offset" binding:"omitempty,min=0"`
 
 	// Search

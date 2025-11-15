@@ -345,16 +345,8 @@ class TimelineDataIngester:
             primary_category = category
 
             if image_url:
-                # Check if the image URL works
-                if not self._check_image_url(image_url):
-                    logger.warning(f"Image URL not accessible for '{event['title']}': {image_url}")
-                    fallback = self._get_fallback_image(primary_category)
-                    if fallback:
-                        logger.info(f"Using category fallback icon: {fallback}")
-                        image_url = fallback
-                        self.stats['image_urls_replaced'] += 1
-                    else:
-                        logger.warning(f"No fallback icon found for category: {primary_category}")
+                # Skip image URL check - trust the source data
+                pass
             else:
                 # No image_url provided, try to use category icon
                 fallback = self._get_fallback_image(primary_category)

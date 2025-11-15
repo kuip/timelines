@@ -31,31 +31,18 @@ if (typeof window !== 'undefined') {
       const response = await fetch('http://localhost:8080/api/categories/tree');
       if (response.ok) {
         const data = await response.json();
-        CATEGORY_TREE = data.categories;
-        // Build flat map for quick lookups
-        data.categories.forEach((group: CategoryGroup) => {
-          group.children.forEach((child: CategoryChild) => {
-            CATEGORY_MAP[child.id] = child;
-          });
-        });
-      }
-    } catch (err) {
-      console.warn('Failed to load categories tree:', err);
-      // Fallback - load from local public categories.json
-      try {
-        const response = await fetch('/categories.json');
-        if (response.ok) {
-          const data = await response.json();
+        if (data.categories && Array.isArray(data.categories)) {
           CATEGORY_TREE = data.categories;
+          // Build flat map for quick lookups
           data.categories.forEach((group: CategoryGroup) => {
             group.children.forEach((child: CategoryChild) => {
               CATEGORY_MAP[child.id] = child;
             });
           });
         }
-      } catch (e) {
-        console.warn('Failed to load categories from fallback:', e);
       }
+    } catch (err) {
+      console.warn('Failed to load categories tree from API:', err);
     }
   })();
 }
@@ -457,18 +444,18 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
 
         {/* Modal */}
         <div
-          className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-gray-800 rounded-lg shadow-2xl z-50 w-11/12 max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+          className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-800 rounded-lg shadow-2xl z-50 w-11/12 max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
           style={{ pointerEvents: 'auto' }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header with close button */}
-          <div className="px-6 py-4 border-b border-gray-700 flex justify-between items-center flex-shrink-0">
-            <h2 className="text-2xl font-bold text-white">
+          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center flex-shrink-0">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
               {isEditing ? `Edit: ${currentEvent.title}` : currentEvent.title}
             </h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white transition text-2xl leading-none"
+              className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition text-2xl leading-none"
               aria-label="Close modal"
             >
               ×
@@ -479,7 +466,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
           <div className="overflow-y-auto flex-1">
             {/* Image - shown first at full width ONLY in view mode */}
             {!isEditing && currentEvent.image_url && (
-              <div className="w-full bg-gray-900">
+              <div className="w-full bg-gray-200 dark:bg-gray-900">
                 <img
                   src={currentEvent.image_url}
                   alt={currentEvent.title}
@@ -495,7 +482,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                 <div className="space-y-4">
                   {/* Title Input */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Title
                     </label>
                     <input
@@ -504,14 +491,14 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                       onChange={(e) =>
                         setFormData({ ...formData, title: e.target.value })
                       }
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                      className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
                       placeholder="Event title"
                     />
                   </div>
 
                   {/* Category Select with Tree */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Category
                     </label>
                     <div className="relative">
@@ -519,7 +506,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                       <button
                         type="button"
                         onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white text-left focus:outline-none focus:border-blue-500 flex justify-between items-center"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white text-left focus:outline-none focus:border-blue-500 flex justify-between items-center"
                       >
                         <span>
                           {formData.category
@@ -531,7 +518,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
 
                       {/* Dropdown menu with category tree */}
                       {showCategoryDropdown && CATEGORY_TREE.length > 0 && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-gray-700 border border-gray-600 rounded shadow-lg z-10 max-h-96 overflow-y-auto">
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded shadow-lg z-10 max-h-96 overflow-y-auto">
                           {CATEGORY_TREE.map((group) => (
                             <div key={group.id}>
                               {/* Parent category header - collapsible */}
@@ -548,7 +535,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                                     return next;
                                   });
                                 }}
-                                className="w-full px-4 py-2 text-left hover:bg-gray-600 border-b border-gray-600 flex items-center gap-2 text-white font-medium"
+                                className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 border-b border-gray-300 dark:border-gray-600 flex items-center gap-2 text-gray-900 dark:text-white font-medium"
                                 style={{ borderLeftColor: group.color, borderLeftWidth: '3px' }}
                               >
                                 <span className="text-sm">
@@ -560,7 +547,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
 
                               {/* Child categories - shown when expanded */}
                               {expandedCategories.has(group.id) && (
-                                <div className="bg-gray-800">
+                                <div className="bg-gray-50 dark:bg-gray-800">
                                   {group.children.map((child) => (
                                     <button
                                       key={child.id}
@@ -569,9 +556,9 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                                         setFormData({ ...formData, category: child.id });
                                         setShowCategoryDropdown(false);
                                       }}
-                                      className={`w-full px-6 py-2 text-left text-sm hover:bg-gray-600 transition ${
+                                      className={`w-full px-6 py-2 text-left text-sm hover:bg-gray-200 dark:hover:bg-gray-600 transition ${
                                         formData.category === child.id
-                                          ? 'bg-blue-900 border-l-2 border-blue-500'
+                                          ? 'bg-blue-100 dark:bg-blue-900 border-l-2 border-blue-500'
                                           : 'border-l-2'
                                       }`}
                                       style={{
@@ -580,8 +567,8 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                                     >
                                       <div className="flex items-center justify-between">
                                         <div>
-                                          <p className="text-white font-medium">{child.name}</p>
-                                          <p className="text-xs text-gray-400">{child.description}</p>
+                                          <p className="text-gray-900 dark:text-white font-medium">{child.name}</p>
+                                          <p className="text-xs text-gray-600 dark:text-gray-400">{child.description}</p>
                                         </div>
                                         {formData.category === child.id && (
                                           <span className="text-blue-400 ml-2">✓</span>
@@ -600,7 +587,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
 
                   {/* Description Textarea */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Description
                     </label>
                     <textarea
@@ -608,7 +595,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                       onChange={(e) =>
                         setFormData({ ...formData, description: e.target.value })
                       }
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                      className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
                       placeholder="Event description"
                       rows={4}
                     />
@@ -617,32 +604,32 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                   {/* Date and Time Picker (instead of unix_seconds input) */}
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Date
                       </label>
                       <input
                         type="date"
                         value={dateTime.date}
                         onChange={(e) => handleDateChange(e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Time
                       </label>
                       <input
                         type="time"
                         value={dateTime.time}
                         onChange={(e) => handleTimeChange(e.target.value)}
-                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
                       />
                     </div>
                   </div>
 
                   {/* Precision Level */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Precision Level
                     </label>
                     <select
@@ -650,7 +637,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                       onChange={(e) =>
                         setFormData({ ...formData, precision_level: e.target.value })
                       }
-                      className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white focus:outline-none focus:border-blue-500"
+                      className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
                     >
                       <option value="nanosecond">Nanosecond</option>
                       <option value="microsecond">Microsecond</option>
@@ -668,7 +655,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
 
                   {/* Image URL */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Image URL
                     </label>
                     <div className="flex gap-2 items-end">
@@ -678,14 +665,14 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                         onChange={(e) =>
                           setFormData({ ...formData, image_url: e.target.value })
                         }
-                        className="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                        className="flex-1 px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
                         placeholder="https://example.com/image.jpg"
                       />
                       {formData.image_url && (
                         <img
                           src={formData.image_url}
                           alt="Preview"
-                          className="w-12 h-12 rounded border border-gray-600 object-contain bg-gray-900 flex-shrink-0"
+                          className="w-12 h-12 rounded border border-gray-300 dark:border-gray-600 object-contain bg-gray-200 dark:bg-gray-900 flex-shrink-0"
                           onError={(e) => {
                             (e.target as HTMLImageElement).style.display = 'none';
                           }}
@@ -696,12 +683,12 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
 
                   {/* Geolocation */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Geolocation
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Latitude</label>
+                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Latitude</label>
                         <input
                           type="number"
                           step="0.0001"
@@ -709,12 +696,12 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                           onChange={(e) =>
                             setFormData({ ...formData, location_latitude: e.target.value ? parseFloat(e.target.value) : undefined })
                           }
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                          className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
                           placeholder="-90 to 90"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">Longitude</label>
+                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Longitude</label>
                         <input
                           type="number"
                           step="0.0001"
@@ -722,20 +709,20 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                           onChange={(e) =>
                             setFormData({ ...formData, location_longitude: e.target.value ? parseFloat(e.target.value) : undefined })
                           }
-                          className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                          className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
                           placeholder="-180 to 180"
                         />
                       </div>
                     </div>
-                    <p className="text-xs text-gray-400 mt-2">Click on the map behind this modal to set coordinates</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-2">Click on the map behind this modal to set coordinates</p>
                   </div>
 
                   {/* Linked Events */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       Linked Events {formData.related_event_ids.length > 0 && `(${formData.related_event_ids.length})`}
                     </label>
-                    <p className="text-xs text-gray-400 mb-2">Shift-click event images to add linked events</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">Shift-click event images to add linked events</p>
 
                     {/* Currently linked events */}
                     {formData.related_event_ids.length > 0 ? (
@@ -745,11 +732,11 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                           return linkedEvent ? (
                             <div
                               key={linkedId}
-                              className="flex items-center justify-between p-2 bg-gray-700 rounded"
+                              className="flex items-center justify-between p-2 bg-gray-100 dark:bg-gray-700 rounded"
                             >
                               <div className="flex-1">
-                                <p className="text-sm text-white font-medium">{linkedEvent.title}</p>
-                                <p className="text-xs text-gray-400">{linkedEvent.formatted_time}</p>
+                                <p className="text-sm text-gray-900 dark:text-white font-medium">{linkedEvent.title}</p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400">{linkedEvent.formatted_time}</p>
                               </div>
                               <button
                                 onClick={() => handleRemoveLinkedEvent(linkedId)}
@@ -762,7 +749,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                         })}
                       </div>
                     ) : (
-                      <p className="text-sm text-gray-400 italic">No linked events yet</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400 italic">No linked events yet</p>
                     )}
                   </div>
                 </div>
@@ -771,14 +758,14 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                 <div className="space-y-4">
                   {/* Time */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-400">Time</h3>
-                    <p className="text-blue-400 font-mono">{currentEvent.formatted_time}</p>
+                    <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400">Time</h3>
+                    <p className="text-blue-600 dark:text-blue-400 font-mono">{currentEvent.formatted_time}</p>
                   </div>
 
                   {/* Category */}
                   {currentEvent.category && (
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-400">Category</h3>
+                      <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400">Category</h3>
                       <span
                         className="inline-block px-3 py-1 text-sm font-bold rounded"
                         style={{
@@ -794,15 +781,15 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                   {/* Description */}
                   {currentEvent.description && (
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-400">Description</h3>
-                      <p className="text-gray-300">{currentEvent.description}</p>
+                      <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400">Description</h3>
+                      <p className="text-gray-800 dark:text-gray-300">{currentEvent.description}</p>
                     </div>
                   )}
 
                   {/* Sources */}
                   {currentEvent.sources && currentEvent.sources.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-400 mb-2">Sources</h3>
+                      <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">Sources</h3>
                       <div className="space-y-1">
                         {currentEvent.sources.map((source) => (
                           source.url ? (
@@ -824,14 +811,14 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
 
                   {/* Importance Score */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-400">Importance</h3>
-                    <p className="text-gray-300">{currentEvent.importance_score.toFixed(2)}</p>
+                    <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400">Importance</h3>
+                    <p className="text-gray-800 dark:text-gray-300">{currentEvent.importance_score.toFixed(2)}</p>
                   </div>
 
                   {/* Vote Stats */}
                   {currentEvent.vote_stats && (
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-400">Votes</h3>
+                      <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400">Votes</h3>
                       <div className="grid grid-cols-3 gap-4 text-sm">
                         <div>
                           <p className="text-gray-500">Importance</p>
@@ -855,17 +842,17 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                   {/* Linked Events */}
                   {formData.related_event_ids.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-semibold text-gray-400 mb-2">Linked Events</h3>
+                      <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400 mb-2">Linked Events</h3>
                       <div className="space-y-2">
                         {formData.related_event_ids.map((linkedId) => {
                           const linkedEvent = getRelatedEventById(linkedId);
                           return linkedEvent ? (
                             <div
                               key={linkedId}
-                              className="p-2 bg-gray-700 rounded text-sm"
+                              className="p-2 bg-gray-100 dark:bg-gray-700 rounded text-sm"
                             >
-                              <p className="font-medium text-white">{linkedEvent.title}</p>
-                              <p className="text-xs text-blue-400">{linkedEvent.formatted_time}</p>
+                              <p className="font-medium text-gray-900 dark:text-white">{linkedEvent.title}</p>
+                              <p className="text-xs text-blue-600 dark:text-blue-400">{linkedEvent.formatted_time}</p>
                             </div>
                           ) : null;
                         })}
@@ -885,7 +872,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
           )}
 
           {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-700 flex justify-between gap-3 flex-shrink-0">
+          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-between gap-3 flex-shrink-0">
             {canEdit ? (
               <>
                 <button
@@ -901,7 +888,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                       <button
                         onClick={handleCancel}
                         disabled={isSaving}
-                        className="px-4 py-2 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         Cancel
                       </button>
@@ -924,7 +911,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                 </div>
               </>
             ) : (
-              <div className="text-sm text-gray-400 flex items-center">
+              <div className="text-sm text-gray-600 dark:text-gray-400 flex items-center">
                 Only Twitter verified users can edit events
               </div>
             )}
