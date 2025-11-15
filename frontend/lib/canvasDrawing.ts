@@ -139,25 +139,25 @@ export const drawExtremityLabels = (
 ) => {
   // Ensure full opacity for extremity labels
   ctx.globalAlpha = 1;
-  // Use dark text for light mode, light text for dark mode
-  ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.9)' : 'rgba(31, 41, 55, 0.9)';
+  // Use warm dark text for light mode, light text for dark mode
+  ctx.fillStyle = isDark ? 'rgba(255, 255, 255, 0.9)' : 'rgba(68, 64, 60, 0.9)'; // stone-700
   ctx.font = 'bold 16px "Roboto Condensed", sans-serif';
   ctx.textAlign = 'right';
 
   const lineHeight = 18; // ~1.125x font size (16px * 1.125)
 
-  // Top label
+  // Top label (moved 20px left from previous position)
   ctx.textBaseline = 'top';
   const topLines = topLabel.split('\n');
   topLines.forEach((line, index) => {
-    ctx.fillText(line, dimensions.width - 5, 2 + index * lineHeight);
+    ctx.fillText(line, dimensions.width - 25, 2 + index * lineHeight);
   });
 
-  // Bottom label
+  // Bottom label (moved 20px left from previous position)
   ctx.textBaseline = 'bottom';
   const bottomLines = bottomLabel.split('\n');
   bottomLines.forEach((line, index) => {
-    ctx.fillText(line, dimensions.width - 5, dimensions.height - 2 - (bottomLines.length - 1 - index) * lineHeight);
+    ctx.fillText(line, dimensions.width - 25, dimensions.height - 2 - (bottomLines.length - 1 - index) * lineHeight);
   });
 };
 

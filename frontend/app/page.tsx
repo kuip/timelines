@@ -395,7 +395,7 @@ export default function Home() {
     : events;
 
   return (
-    <main className="relative h-screen w-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white flex" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
+    <main className="relative h-screen w-screen bg-stone-50 dark:bg-gray-900 text-gray-900 dark:text-white flex" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
       {/* Auth Info - Top Right */}
       <div className="absolute z-50 top-2 right-4">
         <AuthInfo />

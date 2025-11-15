@@ -255,7 +255,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
     // Clear - use theme-aware background color
     const isDark = document.documentElement.classList.contains('dark');
-    ctx.fillStyle = isDark ? '#111827' : '#ffffff';
+    ctx.fillStyle = isDark ? '#111827' : '#fafaf9'; // stone-50
     ctx.fillRect(0, 0, dimensions.width, dimensions.height);
 
     // Performance guard
@@ -265,7 +265,8 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     }
 
     const margin = 0;
-    const timelineX = dimensions.width / 2 + 43;
+    const eventCircleRadius = 10; // Event marker radius
+    const timelineX = dimensions.width - eventCircleRadius - 2; // 2px padding from edge
     const timelineHeight = dimensions.height - margin * 2;
     const timelineTop = margin;
 
@@ -642,7 +643,8 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
           const rect = canvas.getBoundingClientRect();
           const clickX = upEvent.clientX - rect.left;
           const clickY = upEvent.clientY - rect.top;
-          const timelineX = canvas.clientWidth / 2 + 35;
+          const eventCircleRadius = 10;
+          const timelineX = canvas.clientWidth - eventCircleRadius - 2;
           const isShiftClick = upEvent.shiftKey;
 
           // Calculate unix_seconds for ANY click on the timeline for debug purposes
@@ -733,7 +735,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-white dark:bg-gray-900 relative">
+    <div ref={containerRef} className="w-full h-full bg-stone-50 dark:bg-gray-900 relative">
       <canvas
         ref={canvasRef}
         className="block w-full h-full cursor-crosshair"

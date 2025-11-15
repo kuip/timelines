@@ -52,6 +52,19 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
   // Track dragging state using ref to avoid closure issues
   const dragStateRef = useRef({ isDragging: false, lastY: 0 });
 
+  // Track touch state for pinch-to-zoom
+  const touchStateRef = useRef<{
+    initialDistance: number | null;
+    initialK: number | null;
+    centerY: number | null;
+    lastY: number | null;
+  }>({
+    initialDistance: null,
+    initialK: null,
+    centerY: null,
+    lastY: null,
+  });
+
   // Use refs for constraint bounds so they don't trigger effect re-runs
   const boundsRef = useRef({ minY: 0, maxY: 0 });
 
@@ -115,9 +128,95 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
       dragStateRef.current.isDragging = false;
     };
 
+    // Touch gesture handlers for pinch-to-zoom
+    const handleTouchStart = (e: TouchEvent) => {
+      // Always prevent default to avoid page reload/navigation on swipe
+      e.preventDefault();
+
+      if (e.touches.length === 2) {
+        // Two-finger pinch
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const distance = Math.hypot(
+          touch2.clientX - touch1.clientX,
+          touch2.clientY - touch1.clientY
+        );
+        const rect = panel.getBoundingClientRect();
+        const centerY = ((touch1.clientY + touch2.clientY) / 2) - rect.top;
+
+        touchStateRef.current = {
+          initialDistance: distance,
+          initialK: transform.k,
+          centerY: centerY,
+          lastY: null,
+        };
+      } else if (e.touches.length === 1) {
+        // Single finger pan
+        const rect = panel.getBoundingClientRect();
+        touchStateRef.current.lastY = e.touches[0].clientY - rect.top;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      // Always prevent default to avoid page scrolling/navigation
+      e.preventDefault();
+
+      if (e.touches.length === 2 && touchStateRef.current.initialDistance !== null) {
+        // Two-finger pinch zoom
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const distance = Math.hypot(
+          touch2.clientX - touch1.clientX,
+          touch2.clientY - touch1.clientY
+        );
+        const rect = panel.getBoundingClientRect();
+        const centerY = ((touch1.clientY + touch2.clientY) / 2) - rect.top;
+
+        const scale = distance / touchStateRef.current.initialDistance!;
+        const newK = Math.max(1, Math.min(1e18, touchStateRef.current.initialK! * scale));
+
+        // Zoom around the center point
+        const oldWorldY = (transform.y - touchStateRef.current.centerY!) / transform.k;
+
+        const newTransform = {
+          y: oldWorldY * newK + centerY,
+          k: newK
+        };
+
+        onTransformChange(newTransform);
+      } else if (e.touches.length === 1 && touchStateRef.current.lastY !== null) {
+        // Single finger pan
+        const rect = panel.getBoundingClientRect();
+        const currentY = e.touches[0].clientY - rect.top;
+        const deltaY = currentY - touchStateRef.current.lastY!;
+
+        const newTransform = {
+          ...transform,
+          y: transform.y + deltaY
+        };
+
+        onTransformChange(newTransform);
+        touchStateRef.current.lastY = currentY;
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) {
+        touchStateRef.current.initialDistance = null;
+        touchStateRef.current.initialK = null;
+        touchStateRef.current.centerY = null;
+      }
+      if (e.touches.length === 0) {
+        touchStateRef.current.lastY = null;
+      }
+    };
+
     // Register all listeners
     panel.addEventListener('wheel', handleWheel, { passive: false });
     panel.addEventListener('mousedown', handleMouseDown);
+    panel.addEventListener('touchstart', handleTouchStart, { passive: false });
+    panel.addEventListener('touchmove', handleTouchMove, { passive: false });
+    panel.addEventListener('touchend', handleTouchEnd);
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
 
@@ -125,6 +224,9 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
     return () => {
       panel.removeEventListener('wheel', handleWheel);
       panel.removeEventListener('mousedown', handleMouseDown);
+      panel.removeEventListener('touchstart', handleTouchStart);
+      panel.removeEventListener('touchmove', handleTouchMove);
+      panel.removeEventListener('touchend', handleTouchEnd);
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
@@ -319,7 +421,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
   return (
     <div
       ref={panelRef}
-      className="h-full bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col relative"
+      className="h-full bg-stone-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col relative select-none touch-none"
       style={{ fontFamily: '"Roboto Condensed", sans-serif' }}
     >
       {/* Content - Synchronized visible events with vertical alignment */}
@@ -388,7 +490,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                   {isSpecialEvent ? (
                     // Special card for "Now" and "Future Horizon" events - same format as regular events
                     <div
-                      className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-300 dark:border-gray-700 cursor-pointer transition overflow-hidden flex flex-row gap-2"
+                      className="p-2 bg-stone-200 dark:bg-gray-800 rounded border border-stone-400 dark:border-gray-700 cursor-pointer transition overflow-hidden flex flex-row gap-2 shadow-sm"
                       style={{
                         height: '100%',
                         borderLeft: `6px solid ${getCategoryColor(event.category)}`
@@ -398,7 +500,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                       {(() => {
                         const imageUrl = event.image_url;
                         return imageUrl ? (
-                          <div className="w-20 h-20 bg-gray-200 dark:bg-gray-900 rounded flex-shrink-0 border border-gray-400 dark:border-gray-600 overflow-hidden">
+                          <div className="w-20 h-20 bg-stone-300 dark:bg-gray-900 rounded flex-shrink-0 border border-stone-400 dark:border-gray-600 overflow-hidden">
                             <img
                               src={imageUrl}
                               alt={event.title}
@@ -463,7 +565,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                   ) : (
                     // Regular event card - image on left, content on right
                     <div
-                      className="p-2 bg-white dark:bg-gray-800 rounded border border-gray-300 dark:border-gray-700 transition overflow-hidden flex flex-row gap-2"
+                      className="p-2 bg-stone-200 dark:bg-gray-800 rounded border border-stone-400 dark:border-gray-700 transition overflow-hidden flex flex-row gap-2 shadow-sm"
                       style={{
                         height: '100%',
                         borderLeft: `6px solid ${getCategoryColor(event.category)}`
@@ -483,7 +585,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                                 }
                               }
                             }}
-                            className={`w-20 h-20 bg-gray-200 dark:bg-gray-900 rounded flex-shrink-0 border border-gray-400 dark:border-gray-600 overflow-hidden ${imageUrl ? 'hover:border-blue-500 cursor-pointer' : ''} transition`}
+                            className={`w-20 h-20 bg-stone-300 dark:bg-gray-900 rounded flex-shrink-0 border border-stone-400 dark:border-gray-600 overflow-hidden ${imageUrl ? 'hover:border-blue-500 cursor-pointer' : ''} transition`}
                             title={imageUrl ? "Click to view | Shift+Click to link" : undefined}
                           >
                             {imageUrl && (

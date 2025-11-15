@@ -444,7 +444,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
 
         {/* Modal */}
         <div
-          className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white dark:bg-gray-800 rounded-lg shadow-2xl z-50 w-11/12 max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+          className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-stone-200 dark:bg-gray-800 rounded-lg shadow-2xl z-50 w-11/12 max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
           style={{ pointerEvents: 'auto' }}
           onClick={(e) => e.stopPropagation()}
         >
