@@ -35,11 +35,14 @@
 body {
   color: var(--timeline-fg);
   background: var(--timeline-bg);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+  font-family: 'Roboto Condensed', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+  width: 100vw;
+  height: 100vh;
 }
 
 * {
@@ -48,21 +51,10 @@ body {
   margin: 0;
 }
 
-.timeline-container {
-  width: 100%;
-  height: 100vh;
-  position: relative;
+html {
   overflow: hidden;
-  touch-action: none;
-}
-
-@media (min-width: 430px) {
-  .timeline-container {
-    max-width: 430px;
-    margin: 0 auto;
-    aspect-ratio: 9 / 19.5;
-    height: auto;
-  }
+  width: 100vw;
+  height: 100vh;
 }
 
 .timeline-event {

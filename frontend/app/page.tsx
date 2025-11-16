@@ -91,9 +91,30 @@ export default function Home() {
     const k = parseFloat(params.get('k') || '');
 
     if (!isNaN(y) && !isNaN(k)) {
-      // Clamp zoom to reasonable range to prevent performance issues
-      const clampedK = Math.max(1, Math.min(1e18, k));
-      setTransform({ y, k: clampedK });
+      // Check if transform is unreasonable (likely corrupted/extreme values)
+      // If k is very large (>1e10) or y is extreme, reset to default instead
+      const isUnreasonable = k > 1e10 || Math.abs(y) > 1e13;
+
+      if (isUnreasonable) {
+        // Reset to default - redirect to clean URL
+        window.location.replace('/');
+        return;
+      }
+
+      // Clamp zoom and y to reasonable ranges to prevent performance issues
+      const clampedK = Math.max(1, Math.min(1e12, k));
+      // Clamp y to prevent extreme off-screen positions
+      const clampedY = Math.max(-1e14, Math.min(1e14, y));
+
+      // If values were clamped, update URL to reflect the clamped values
+      if (clampedY !== y || clampedK !== k) {
+        const newParams = new URLSearchParams();
+        newParams.set('y', clampedY.toString());
+        newParams.set('k', clampedK.toString());
+        window.history.replaceState({}, '', `?${newParams.toString()}`);
+      }
+
+      setTransform({ y: clampedY, k: clampedK });
     } else {
       // Load default transform from config and calculate y to show NOW at center
       const loadDefaultTransform = async () => {

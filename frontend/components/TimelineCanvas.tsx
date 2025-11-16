@@ -113,7 +113,9 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
   // Compute and notify parent of visible events
   useEffect(() => {
-    if (dimensions.width === 0 || !onVisibleEventsChange) return;
+    if (dimensions.width === 0 || !onVisibleEventsChange) {
+      return;
+    }
 
     const margin = 0;
     const timelineHeight = dimensions.height - margin * 2;
