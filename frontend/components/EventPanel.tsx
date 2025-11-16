@@ -20,6 +20,7 @@ interface EventPanelProps {
   imagePaddingPx?: number;
   onCategoryFilter?: (categoryId: string) => void;
   categoryFilter?: string | null;
+  onHorizontalSwipe?: (direction: 'left' | 'right') => void;
 }
 
 const constrainEventPanelTransform = (
@@ -41,7 +42,7 @@ const getTextColorForBg = (bgColor: string): string => {
   return isDark ? '#f3f4f6' : '#1f2937';
 };
 
-const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleEvents, transform = { y: 0, k: 1 }, onEventClick, onShiftClickImage, onTransformChange, onDisplayedEventsChange, cardHeightPx, cardViewportPaddingPx, imagePaddingPx, onCategoryFilter, categoryFilter }) => {
+const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleEvents, transform = { y: 0, k: 1 }, onEventClick, onShiftClickImage, onTransformChange, onDisplayedEventsChange, cardHeightPx, cardViewportPaddingPx, imagePaddingPx, onCategoryFilter, categoryFilter, onHorizontalSwipe }) => {
   const [dimensions, setDimensions] = useState({ height: 0 });
   const [currentTime, setCurrentTime] = useState(Date.now() / 1000); // Current time in Unix seconds
   const [contentBounds, setContentBounds] = useState({ minY: 0, maxY: 0 });
@@ -50,19 +51,31 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Track dragging state using ref to avoid closure issues
-  const dragStateRef = useRef({ isDragging: false, lastY: 0 });
+  const dragStateRef = useRef({
+    isDragging: false,
+    lastY: 0,
+    startX: 0,
+    startY: 0,
+    startTime: 0
+  });
 
-  // Track touch state for pinch-to-zoom
+  // Track touch state for pinch-to-zoom and horizontal swipe
   const touchStateRef = useRef<{
     initialDistance: number | null;
     initialK: number | null;
     centerY: number | null;
     lastY: number | null;
+    startX: number | null;
+    startY: number | null;
+    startTime: number | null;
   }>({
     initialDistance: null,
     initialK: null,
     centerY: null,
     lastY: null,
+    startX: null,
+    startY: null,
+    startTime: null,
   });
 
   // Use refs for constraint bounds so they don't trigger effect re-runs
@@ -77,63 +90,110 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
     setContentBounds({ minY, maxY });
   }, [dimensions.height]);
 
-  // Combined setup for mouse gestures
+  // Wheel handler for zoom on EventPanel
   useEffect(() => {
     const panel = panelRef.current;
-    if (!panel || !onTransformChange) return;
+    if (!panel) return;
 
-    // Handler for wheel zoom
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
 
       const rect = panel.getBoundingClientRect();
       const mouseY = e.clientY - rect.top;
 
-      // Same zoom sensitivity as canvas
+      // Zoom sensitivity
       const delta = e.deltaY > 0 ? 1.033 : 0.967;
       const newK = Math.max(1, Math.min(1e18, transform.k * delta));
 
+      // Zoom at point logic
       const oldWorldY = (transform.y - mouseY) / transform.k;
-
       const newTransform = {
         y: oldWorldY * newK + mouseY,
         k: newK
       };
 
-      onTransformChange(newTransform);
+      if (onTransformChange) {
+        onTransformChange(newTransform);
+      }
     };
 
-    // Handler for mouse down to start drag
+    panel.addEventListener('wheel', handleWheel, { passive: false });
+    return () => panel.removeEventListener('wheel', handleWheel);
+  }, [transform, onTransformChange]);
+
+  // Mouse drag handler for panning and horizontal swipe
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+
     const handleMouseDown = (e: MouseEvent) => {
-      if (!(e.target instanceof Node) || !panel.contains(e.target)) return;
-      dragStateRef.current = { isDragging: true, lastY: e.clientY };
+      // Only handle left mouse button
+      if (e.button !== 0) return;
+
+      dragStateRef.current.isDragging = true;
+      dragStateRef.current.lastY = e.clientY;
+      dragStateRef.current.startX = e.clientX;
+      dragStateRef.current.startY = e.clientY;
+      dragStateRef.current.startTime = Date.now();
+      e.preventDefault();
     };
 
-    // Handler for mouse move during drag
     const handleMouseMove = (e: MouseEvent) => {
       if (!dragStateRef.current.isDragging) return;
 
       const deltaY = e.clientY - dragStateRef.current.lastY;
+      dragStateRef.current.lastY = e.clientY;
+
       const newTransform = {
-        ...transform,
-        y: transform.y + deltaY
+        y: transform.y + deltaY,
+        k: transform.k
       };
 
-      onTransformChange(newTransform);
-      dragStateRef.current.lastY = e.clientY;
+      if (onTransformChange) {
+        onTransformChange(newTransform);
+      }
     };
 
-    // Handler for mouse up to stop drag
-    const handleMouseUp = () => {
-      dragStateRef.current.isDragging = false;
+    const handleMouseUp = (e: MouseEvent) => {
+      if (dragStateRef.current.isDragging) {
+        // Check for horizontal swipe
+        const deltaX = e.clientX - dragStateRef.current.startX;
+        const deltaY = e.clientY - dragStateRef.current.startY;
+        const deltaTime = Date.now() - dragStateRef.current.startTime;
+
+        // Detect horizontal swipe (fast, primarily horizontal, significant distance)
+        if (deltaTime < 300 &&
+            Math.abs(deltaX) > Math.abs(deltaY) * 2 &&
+            Math.abs(deltaX) > 80) {
+          if (onHorizontalSwipe) {
+            onHorizontalSwipe(deltaX > 0 ? 'right' : 'left');
+          }
+        }
+
+        dragStateRef.current.isDragging = false;
+      }
     };
 
-    // Touch gesture handlers for pinch-to-zoom
+    panel.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      panel.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [transform, onTransformChange, onHorizontalSwipe]);
+
+  // Touch handlers for pan and pinch-to-zoom
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+
     const handleTouchStart = (e: TouchEvent) => {
-      // Always prevent default to avoid page reload/navigation on swipe
-      e.preventDefault();
-
       if (e.touches.length === 2) {
+        // Prevent default for pinch gestures
+        e.preventDefault();
         // Two-finger pinch
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
@@ -149,19 +209,24 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
           initialK: transform.k,
           centerY: centerY,
           lastY: null,
+          startX: null,
+          startY: null,
+          startTime: null,
         };
       } else if (e.touches.length === 1) {
-        // Single finger pan
+        // Single finger - could be pan or horizontal swipe
         const rect = panel.getBoundingClientRect();
         touchStateRef.current.lastY = e.touches[0].clientY - rect.top;
+        touchStateRef.current.startX = e.touches[0].clientX;
+        touchStateRef.current.startY = e.touches[0].clientY;
+        touchStateRef.current.startTime = Date.now();
       }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      // Always prevent default to avoid page scrolling/navigation
-      e.preventDefault();
-
       if (e.touches.length === 2 && touchStateRef.current.initialDistance !== null) {
+        // Prevent default for pinch gestures
+        e.preventDefault();
         // Two-finger pinch zoom
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
@@ -170,37 +235,83 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
           touch2.clientY - touch1.clientY
         );
         const rect = panel.getBoundingClientRect();
-        const centerY = ((touch1.clientY + touch2.clientY) / 2) - rect.top;
+        const currentCenterY = ((touch1.clientY + touch2.clientY) / 2) - rect.top;
 
         const scale = distance / touchStateRef.current.initialDistance!;
         const newK = Math.max(1, Math.min(1e18, touchStateRef.current.initialK! * scale));
 
-        // Zoom around the center point
-        const oldWorldY = (transform.y - touchStateRef.current.centerY!) / transform.k;
+        // Zoom around the current center point between fingers (not the initial center)
+        const oldWorldY = (transform.y - currentCenterY) / transform.k;
 
         const newTransform = {
-          y: oldWorldY * newK + centerY,
+          y: oldWorldY * newK + currentCenterY,
           k: newK
         };
 
-        onTransformChange(newTransform);
+        if (onTransformChange) {
+          onTransformChange(newTransform);
+        }
       } else if (e.touches.length === 1 && touchStateRef.current.lastY !== null) {
-        // Single finger pan
+        // Single finger pan - only prevent default if we're actually panning
         const rect = panel.getBoundingClientRect();
         const currentY = e.touches[0].clientY - rect.top;
         const deltaY = currentY - touchStateRef.current.lastY!;
 
-        const newTransform = {
-          ...transform,
-          y: transform.y + deltaY
-        };
+        // Only prevent default if there's significant vertical movement
+        if (Math.abs(deltaY) > 5) {
+          e.preventDefault();
 
-        onTransformChange(newTransform);
+          const newTransform = {
+            y: transform.y + deltaY,
+            k: transform.k
+          };
+
+          if (onTransformChange) {
+            onTransformChange(newTransform);
+          }
+        }
         touchStateRef.current.lastY = currentY;
       }
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
+      // Check for horizontal swipe or tap before clearing state
+      if (e.changedTouches.length > 0 &&
+          touchStateRef.current.startX !== null &&
+          touchStateRef.current.startY !== null &&
+          touchStateRef.current.startTime !== null) {
+        const endX = e.changedTouches[0].clientX;
+        const endY = e.changedTouches[0].clientY;
+        const deltaX = endX - touchStateRef.current.startX;
+        const deltaY = endY - touchStateRef.current.startY;
+        const deltaTime = Date.now() - touchStateRef.current.startTime;
+        const distance = Math.hypot(deltaX, deltaY);
+
+        // Detect horizontal swipe (fast, primarily horizontal, significant distance)
+        if (deltaTime < 300 &&
+            Math.abs(deltaX) > Math.abs(deltaY) * 2 &&
+            Math.abs(deltaX) > 80) {
+          if (onHorizontalSwipe) {
+            onHorizontalSwipe(deltaX > 0 ? 'right' : 'left');
+          }
+        }
+        // Detect tap (quick touch with minimal movement)
+        else if (deltaTime < 300 && distance < 10) {
+          // Simulate a click event at the touch location
+          const target = document.elementFromPoint(endX, endY);
+          if (target) {
+            target.dispatchEvent(new MouseEvent('click', {
+              bubbles: true,
+              cancelable: true,
+              view: window,
+              clientX: endX,
+              clientY: endY
+            }));
+          }
+        }
+      }
+
+      // Clear touch state
       if (e.touches.length < 2) {
         touchStateRef.current.initialDistance = null;
         touchStateRef.current.initialK = null;
@@ -208,29 +319,24 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
       }
       if (e.touches.length === 0) {
         touchStateRef.current.lastY = null;
+        touchStateRef.current.startX = null;
+        touchStateRef.current.startY = null;
+        touchStateRef.current.startTime = null;
       }
     };
 
-    // Register all listeners
-    panel.addEventListener('wheel', handleWheel, { passive: false });
-    panel.addEventListener('mousedown', handleMouseDown);
     panel.addEventListener('touchstart', handleTouchStart, { passive: false });
     panel.addEventListener('touchmove', handleTouchMove, { passive: false });
     panel.addEventListener('touchend', handleTouchEnd);
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    panel.addEventListener('touchcancel', handleTouchEnd);
 
-    // Cleanup
     return () => {
-      panel.removeEventListener('wheel', handleWheel);
-      panel.removeEventListener('mousedown', handleMouseDown);
       panel.removeEventListener('touchstart', handleTouchStart);
       panel.removeEventListener('touchmove', handleTouchMove);
       panel.removeEventListener('touchend', handleTouchEnd);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      panel.removeEventListener('touchcancel', handleTouchEnd);
     };
-  }, [transform, onTransformChange, dimensions.height]);
+  }, [transform, onTransformChange]);
 
   // Track panel height for coordinate calculations (full panel height)
   useEffect(() => {
@@ -333,7 +439,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
   const displayableEvents = useMemo(() => {
     const START_TIME = -435494878264400000;
 
-    console.log('EventPanel: visibleEvents=', visibleEvents.length, 'dimensions.height=', dimensions.height);
+    console.log('EventPanel: visibleEvents=', visibleEvents.length, 'dimensions.height=', dimensions.height, 'window.innerHeight=', window.innerHeight);
 
     // Filter visible events to exclude those beyond Future Horizon
     const filteredVisibleEvents = visibleEvents.filter((event) => {
@@ -384,7 +490,8 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
       .sort((a, b) => a.eventY - b.eventY)
       .filter(({ eventY }, index, sorted) => {
         // Viewport culling - skip cards far outside viewport
-        if (eventY < -cardHeight - cardPadding || eventY > (dimensions.height || 800) + cardHeight + cardPadding) {
+        const viewportHeight = dimensions.height || window.innerHeight || 800;
+        if (eventY < -cardHeight - cardPadding || eventY > viewportHeight + cardHeight + cardPadding) {
           return false;
         }
 
@@ -421,11 +528,12 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
   return (
     <div
       ref={panelRef}
-      className="h-full bg-stone-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex flex-col relative select-none touch-none"
+      className="h-full bg-stone-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 flex relative select-none"
       style={{ fontFamily: '"Roboto Condensed", sans-serif' }}
     >
+
       {/* Content - Synchronized visible events with vertical alignment */}
-      <div ref={contentRef} className="h-full relative">
+      <div ref={contentRef} className="h-full flex-1 relative">
         {displayableEvents.length > 0 ? (
           <div className="relative" style={{ height: '100%' }}>
             {displayableEvents
@@ -490,7 +598,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                   {isSpecialEvent ? (
                     // Special card for "Now" and "Future Horizon" events - same format as regular events
                     <div
-                      className="p-2 bg-stone-200 dark:bg-gray-800 rounded border border-stone-400 dark:border-gray-700 cursor-pointer transition overflow-hidden flex flex-row gap-2 shadow-sm"
+                      className="p-2 bg-stone-200 dark:bg-gray-800 rounded border border-stone-400 dark:border-gray-700 transition overflow-hidden flex flex-row gap-2 shadow-sm hover:border-stone-500 dark:hover:border-gray-600"
                       style={{
                         height: '100%',
                         borderLeft: `6px solid ${getCategoryColor(event.category)}`
@@ -500,7 +608,17 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                       {(() => {
                         const imageUrl = event.image_url;
                         return imageUrl ? (
-                          <div className="w-20 h-20 bg-stone-300 dark:bg-gray-900 rounded flex-shrink-0 border border-stone-400 dark:border-gray-600 overflow-hidden">
+                          <div
+                            onClick={(e) => {
+                              if (e.shiftKey) {
+                                onShiftClickImage?.(event);
+                              } else {
+                                onEventClick?.(event);
+                              }
+                            }}
+                            className="w-20 h-20 bg-stone-300 dark:bg-gray-900 rounded flex-shrink-0 border border-stone-400 dark:border-gray-600 overflow-hidden hover:border-blue-500 cursor-pointer transition"
+                            title="Click to view | Shift+Click to link"
+                          >
                             <img
                               src={imageUrl}
                               alt={event.title}
@@ -516,37 +634,41 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                       {/* Content on right */}
                       <div className="flex flex-col flex-1 overflow-hidden">
                         {/* First line: Time and Category Tag */}
-                        <div className="flex items-center gap-1 flex-shrink-0 justify-between">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           {/* Event Time - All resolutions */}
                           <div className="text-xs text-blue-400 font-bold whitespace-nowrap">
                             {event.formatted_time}
                           </div>
 
-                          {/* Category Tags - Hierarchy */}
-                          {event.category && (
-                            <div className="flex gap-1 flex-wrap">
-                              {getCategoryHierarchy(event.category).map((cat) => (
-                                <span
-                                  key={cat.id}
-                                  className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0 w-fit cursor-pointer hover:opacity-80 transition-opacity"
-                                  style={{
-                                    backgroundColor: cat.color,
-                                    color: getTextColorForBg(cat.color),
-                                    outline: categoryFilter === cat.id ? '2px solid white' : 'none'
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (onCategoryFilter) {
-                                      onCategoryFilter(cat.id);
-                                    }
-                                  }}
-                                  title={`Filter by ${cat.name}`}
-                                >
-                                  {cat.name}
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                          {/* Category Tag - Only leaf (last item) */}
+                          {event.category && (() => {
+                            const hierarchy = getCategoryHierarchy(event.category);
+                            const leafCat = hierarchy[hierarchy.length - 1]; // Get last (leaf) category
+                            if (!leafCat) return null;
+
+                            // Shorten tag name to fit on one line
+                            const shortenedName = leafCat.name.length > 8 ? leafCat.name.substring(0, 7) + '…' : leafCat.name;
+
+                            return (
+                              <span
+                                className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                                style={{
+                                  backgroundColor: leafCat.color,
+                                  color: getTextColorForBg(leafCat.color),
+                                  outline: categoryFilter === leafCat.id ? '2px solid white' : 'none'
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onCategoryFilter) {
+                                    onCategoryFilter(leafCat.id);
+                                  }
+                                }}
+                                title={`Filter by ${leafCat.name}`}
+                              >
+                                {shortenedName}
+                              </span>
+                            );
+                          })()}
                         </div>
 
                         {/* Event Title */}
@@ -565,7 +687,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                   ) : (
                     // Regular event card - image on left, content on right
                     <div
-                      className="p-2 bg-stone-200 dark:bg-gray-800 rounded border border-stone-400 dark:border-gray-700 transition overflow-hidden flex flex-row gap-2 shadow-sm"
+                      className="p-2 bg-stone-200 dark:bg-gray-800 rounded border border-stone-400 dark:border-gray-700 transition overflow-hidden flex flex-row gap-2 shadow-sm hover:border-stone-500 dark:hover:border-gray-600"
                       style={{
                         height: '100%',
                         borderLeft: `6px solid ${getCategoryColor(event.category)}`
@@ -605,7 +727,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                       {/* Content on right */}
                       <div className="flex flex-col flex-1 overflow-hidden">
                         {/* First line: Time and Category Tag */}
-                        <div className="flex items-center gap-1 flex-shrink-0 justify-between">
+                        <div className="flex items-center gap-1 flex-shrink-0">
                           {/* Event Time - Year, Month, Day, Time */}
                           <div className="text-xs text-blue-400 font-bold whitespace-nowrap">
                             {(() => {
@@ -661,31 +783,35 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                             })()}
                           </div>
 
-                          {/* Category Tags - Hierarchy */}
-                          {event.category && (
-                            <div className="flex gap-1 flex-wrap">
-                              {getCategoryHierarchy(event.category).map((cat) => (
-                                <span
-                                  key={cat.id}
-                                  className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0 w-fit cursor-pointer hover:opacity-80 transition-opacity"
-                                  style={{
-                                    backgroundColor: cat.color,
-                                    color: getTextColorForBg(cat.color),
-                                    outline: categoryFilter === cat.id ? '2px solid white' : 'none'
-                                  }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (onCategoryFilter) {
-                                      onCategoryFilter(cat.id);
-                                    }
-                                  }}
-                                  title={`Filter by ${cat.name}`}
-                                >
-                                  {cat.name}
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                          {/* Category Tag - Only leaf (last item) */}
+                          {event.category && (() => {
+                            const hierarchy = getCategoryHierarchy(event.category);
+                            const leafCat = hierarchy[hierarchy.length - 1]; // Get last (leaf) category
+                            if (!leafCat) return null;
+
+                            // Shorten tag name to fit on one line
+                            const shortenedName = leafCat.name.length > 8 ? leafCat.name.substring(0, 7) + '…' : leafCat.name;
+
+                            return (
+                              <span
+                                className="inline-block px-1 py-0.5 text-xs font-bold rounded flex-shrink-0 cursor-pointer hover:opacity-80 transition-opacity"
+                                style={{
+                                  backgroundColor: leafCat.color,
+                                  color: getTextColorForBg(leafCat.color),
+                                  outline: categoryFilter === leafCat.id ? '2px solid white' : 'none'
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onCategoryFilter) {
+                                    onCategoryFilter(leafCat.id);
+                                  }
+                                }}
+                                title={`Filter by ${leafCat.name}`}
+                              >
+                                {shortenedName}
+                              </span>
+                            );
+                          })()}
                         </div>
 
                         {/* Event Title */}

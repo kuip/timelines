@@ -1,11 +1,13 @@
 {
   "api_url": "http://192.168.1.91:8080",
   "default_transform": {
-    "y": -1970397435524.302,
-    "k": 60944452.3505535
+    "y": -4415278897010,
+    "k": 60944452
   },
   "ui": {
     "timelineCanvasWidthPx": 200,
+    "timelineSliverWidthPx": 32,
+    "responsiveBreakpointPx": 700,
     "mapWidthPercent": 35,
     "cardHeightPx": 100,
     "cardViewportPaddingPx": 0,

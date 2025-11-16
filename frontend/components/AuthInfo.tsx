@@ -89,31 +89,34 @@ export const AuthInfo = () => {
   };
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-2">
       {isAuthenticated ? (
         <>
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-300">{user?.displayName}</span>
-            {isTwitterVerified && (
-              <span className="text-blue-400 font-bold text-lg" title="Twitter Verified">
-                ✓
-              </span>
-            )}
-          </div>
-          <button
-            onClick={logout}
-            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition"
-          >
-            Logout
-          </button>
+          {user?.avatarUrl ? (
+            <img
+              src={user.avatarUrl}
+              alt={user.displayName}
+              className="w-8 h-8 rounded-full cursor-pointer hover:opacity-80 transition"
+              onClick={logout}
+              title={`${user.displayName} - Click to logout`}
+            />
+          ) : (
+            <button
+              onClick={logout}
+              className="w-8 h-8 bg-gray-700 hover:bg-gray-600 text-white text-lg rounded-full transition flex items-center justify-center"
+              title={`${user?.displayName} - Click to logout`}
+            >
+              𝕏
+            </button>
+          )}
         </>
       ) : (
         <button
           onClick={handleTwitterLogin}
-          className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded font-semibold transition flex items-center gap-2"
+          className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white text-lg rounded-full transition flex items-center justify-center"
+          title="Login with Twitter"
         >
-          <span>𝕏</span>
-          <span>Login with Twitter</span>
+          𝕏
         </button>
       )}
     </div>

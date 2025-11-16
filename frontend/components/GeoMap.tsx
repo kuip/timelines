@@ -478,14 +478,17 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
         // Fit map bounds to show all markers
         // Always fit to show all visible markers (unless editing location)
         if (markersRef.current.size > 0 && !isEditingLocation) {
+          // Force map to recalculate its size in case container changed
+          mapRef.current.invalidateSize();
+
           const bounds = L.latLngBounds([]);
           markersRef.current.forEach((marker) => {
             bounds.extend(marker.getLatLng());
           });
 
-          // Fit bounds to show all visible markers
+          // Fit bounds to show all visible markers with minimal padding to keep them in view
           mapRef.current.fitBounds(bounds, {
-            padding: [50, 50], // Add padding around the bounds
+            padding: [20, 20], // Reduced padding to keep markers visible in smaller viewports
             maxZoom: markersRef.current.size === 1 ? 8 : 10, // Less zoom for single markers
             animate: true,
             duration: 0.5,
@@ -601,6 +604,24 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
       });
     }
   }, [editingEventLocation, onMapClick, isEditingLocation]);
+
+  // Handle map resize when container size changes (e.g., mobile view switching)
+  useEffect(() => {
+    if (!mapRef.current || !mapContainer.current) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (mapRef.current) {
+        // Invalidate size when container dimensions change
+        mapRef.current.invalidateSize();
+      }
+    });
+
+    resizeObserver.observe(mapContainer.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [mapReady]);
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800">

@@ -812,7 +812,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                   {/* Importance Score */}
                   <div>
                     <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400">Importance</h3>
-                    <p className="text-gray-800 dark:text-gray-300">{currentEvent.importance_score.toFixed(2)}</p>
+                    <p className="text-gray-800 dark:text-gray-300">{currentEvent.importance_score?.toFixed(2) || 'N/A'}</p>
                   </div>
 
                   {/* Vote Stats */}

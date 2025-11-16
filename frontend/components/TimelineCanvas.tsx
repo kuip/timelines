@@ -75,7 +75,15 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
   // Use propsTransform if provided by parent, otherwise manage locally
   const [localTransform, setLocalTransform] = useState<Transform>(initialTransform || { y: 0, k: 1 });
   const transform = propsTransform || localTransform;
-  const setTransform = propsTransform ? () => {} : setLocalTransform; // No-op if using props
+
+  // Update transform - either through parent callback or local state
+  const updateTransform = (newTransform: Transform) => {
+    if (propsTransform && onTransformChange) {
+      onTransformChange(newTransform);
+    } else {
+      setLocalTransform(newTransform);
+    }
+  };
   const imageCache = useRef<Map<string, HTMLImageElement>>(new Map());
   const [imagesLoaded, setImagesLoaded] = useState(0);
   const [currentTime, setCurrentTime] = useState(Date.now() / 1000);
@@ -230,7 +238,21 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
     updateDimensions();
     window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
+
+    // Add ResizeObserver to watch the container element itself
+    // This catches size changes from CSS media queries and dynamic styling
+    let resizeObserver: ResizeObserver | null = null;
+    if (containerRef.current) {
+      resizeObserver = new ResizeObserver(updateDimensions);
+      resizeObserver.observe(containerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateDimensions);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+    };
   }, [onDimensionsChange]);
 
   // Main canvas drawing
@@ -588,22 +610,20 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
       // Reduce zoom sensitivity by 1.5x (from 1.05/0.95 to 1.033/0.967)
       const delta = e.deltaY > 0 ? 1.033 : 0.967;
 
-      setTransform((prevTransform) => {
-        const newK = Math.max(1, Math.min(1e18, prevTransform.k * delta));
-        const timelineHeight = canvas.clientHeight;
-        const oldWorldY = (prevTransform.y - mouseY) / prevTransform.k;
+      const newK = Math.max(1, Math.min(1e18, transform.k * delta));
+      const timelineHeight = canvas.clientHeight;
+      const oldWorldY = (transform.y - mouseY) / transform.k;
 
-        let newTransform: Transform = {
-          y: oldWorldY * newK + mouseY,
-          k: newK
-        };
+      let newTransform: Transform = {
+        y: oldWorldY * newK + mouseY,
+        k: newK
+      };
 
-        const constrainer = (t: Transform) =>
-          constrainTransform(t, { width: canvas.clientWidth, height: canvas.clientHeight }, START_TIME, END_TIME, FUTURE_HORIZON_TIME);
+      const constrainer = (t: Transform) =>
+        constrainTransform(t, { width: canvas.clientWidth, height: canvas.clientHeight }, START_TIME, END_TIME, FUTURE_HORIZON_TIME);
 
-        newTransform = constrainer(newTransform);
-        return newTransform;
-      });
+      newTransform = constrainer(newTransform);
+      updateTransform(newTransform);
     };
 
     const handleMouseDown = (e: MouseEvent) => {
@@ -622,15 +642,13 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
           const frameDeltaY = moveEvent.clientY - lastY;
           lastY = moveEvent.clientY;
 
-          setTransform((prevTransform) => {
-            let newTransform: Transform = { ...prevTransform, y: prevTransform.y + frameDeltaY };
+          let newTransform: Transform = { ...transform, y: transform.y + frameDeltaY };
 
-            const constrainer = (t: Transform) =>
-              constrainTransform(t, { width: canvas.clientWidth, height: canvas.clientHeight }, START_TIME, END_TIME, FUTURE_HORIZON_TIME);
+          const constrainer = (t: Transform) =>
+            constrainTransform(t, { width: canvas.clientWidth, height: canvas.clientHeight }, START_TIME, END_TIME, FUTURE_HORIZON_TIME);
 
-            newTransform = constrainer(newTransform);
-            return newTransform;
-          });
+          newTransform = constrainer(newTransform);
+          updateTransform(newTransform);
         }
       };
 

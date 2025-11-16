@@ -17,6 +17,8 @@ const GeoMap = dynamic(() => import('@/components/GeoMap'), { ssr: false });
 
 interface UIConfig {
   timelineCanvasWidthPx: number;
+  timelineSliverWidthPx: number;
+  responsiveBreakpointPx: number;
   mapWidthPercent: number;
   cardHeightPx: number;
   cardViewportPaddingPx: number;
@@ -38,6 +40,8 @@ export default function Home() {
   const [canvasDimensions, setCanvasDimensions] = useState({ width: 200, height: 0 });
   const [uiConfig, setUiConfig] = useState<UIConfig>({
     timelineCanvasWidthPx: 200,
+    timelineSliverWidthPx: 32,
+    responsiveBreakpointPx: 768,
     mapWidthPercent: 45,
     cardHeightPx: 100,
     cardViewportPaddingPx: 0,
@@ -49,6 +53,7 @@ export default function Home() {
   const [editingLocationMode, setEditingLocationMode] = useState(false);
   const [editingEventLocation, setEditingEventLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [mobileView, setMobileView] = useState<'timeline' | 'list' | 'map'>('list'); // For narrow devices
 
   // Constants for timeline
   const START_TIME = -435494878264400000;
@@ -90,7 +95,7 @@ export default function Home() {
       const clampedK = Math.max(1, Math.min(1e18, k));
       setTransform({ y, k: clampedK });
     } else {
-      // Load default transform from config and calculate y for current viewport height
+      // Load default transform from config and calculate y to show NOW at center
       const loadDefaultTransform = async () => {
         try {
           const response = await fetch(`/settings.json?t=${Date.now()}`);
@@ -99,19 +104,12 @@ export default function Home() {
             if (config.default_transform) {
               const { k: defaultK } = config.default_transform;
 
-              // Constants from coordinateHelper
+              // Calculate y to place NOW at center of current viewport
               const START_TIME = -435494878264400000;
               const END_TIME = 435457000000000000;
-              const target2022 = Math.floor(new Date('2022-01-01').getTime() / 1000);
-
-              // Calculate y for current viewport height
-              // Formula: y_position = ((END_TIME - unixSeconds) / (END_TIME - START_TIME)) * timelineHeight * k + transform.y
-              // At center, we want unixSeconds = target2022
-              // centerScreenY = ((END_TIME - target2022) / (END_TIME - START_TIME)) * timelineHeight * k + transform.y
-              // transform.y = centerScreenY - ((END_TIME - target2022) / (END_TIME - START_TIME)) * timelineHeight * k
-
+              const nowTime = Math.floor(Date.now() / 1000);
               const centerScreenY = viewportHeight / 2;
-              const ratio = (END_TIME - target2022) / (END_TIME - START_TIME);
+              const ratio = (END_TIME - nowTime) / (END_TIME - START_TIME);
               const calculatedY = centerScreenY - (ratio * viewportHeight * defaultK);
 
               const newParams = new URLSearchParams();
@@ -122,9 +120,18 @@ export default function Home() {
           }
         } catch (err) {
           console.error('Failed to load default transform from config:', err);
-          // Fallback to Big Bang at middle
-          const fallbackTransform = { y: -viewportHeight / 2, k: 1 };
-          setTransform(fallbackTransform);
+          // Fallback to NOW at center with zoom 1
+          const START_TIME = -435494878264400000;
+          const END_TIME = 435457000000000000;
+          const nowTime = Math.floor(Date.now() / 1000);
+          const centerScreenY = viewportHeight / 2;
+          const ratio = (END_TIME - nowTime) / (END_TIME - START_TIME);
+          const calculatedY = centerScreenY - (ratio * viewportHeight * 1);
+
+          const newParams = new URLSearchParams();
+          newParams.set('y', calculatedY.toString());
+          newParams.set('k', '1');
+          window.location.replace(`?${newParams.toString()}`);
         }
       };
 
@@ -308,6 +315,8 @@ export default function Home() {
     }
   }, [modalOpen]);
 
+  // Mobile view swipe navigation disabled for now to prevent issues with timeline interaction
+
   // When entering edit mode, initialize editing location with selected event's coordinates
   useEffect(() => {
     if (editingLocationMode && selectedEvent && modalRef.current) {
@@ -384,6 +393,21 @@ export default function Home() {
     window.location.href = '/';
   };
 
+  const handleHorizontalSwipe = (direction: 'left' | 'right') => {
+    const views: Array<'timeline' | 'list' | 'map'> = ['timeline', 'list', 'map'];
+    const currentIndex = views.indexOf(mobileView);
+
+    if (direction === 'right') {
+      // Swipe right - go to previous view
+      const newIndex = currentIndex > 0 ? currentIndex - 1 : views.length - 1;
+      setMobileView(views[newIndex]);
+    } else {
+      // Swipe left - go to next view
+      const newIndex = currentIndex < views.length - 1 ? currentIndex + 1 : 0;
+      setMobileView(views[newIndex]);
+    }
+  };
+
   // Filter events based on category filter
   // Supports filtering by both exact category and parent categories
   const filteredEvents = categoryFilter
@@ -411,18 +435,32 @@ export default function Home() {
         <img src="/images/categories/now.svg" alt="Now" className="w-12 h-12" />
       </button>
 
-      {/* Canvas Timeline */}
-      <div className="h-full flex-shrink-0" style={{ width: `${uiConfig.timelineCanvasWidthPx}px` }}>
+      {/* Canvas Timeline - Always on LEFT side */}
+      <div
+        className="h-full flex-shrink-0 bg-stone-100 dark:bg-gray-800 timeline-container"
+        style={{
+          ['--timeline-full-width' as any]: `${uiConfig.timelineCanvasWidthPx}px`,
+          ['--timeline-sliver-width' as any]: `${uiConfig.timelineSliverWidthPx}px`,
+        }}
+      >
         <TimelineCanvas events={filteredEvents} displayedCardEvents={displayedCardEvents} onEventClick={handleEventClick} onTransformChange={handleTimelineTransform} onVisibleEventsChange={setVisibleEvents} initialTransform={transform} transform={transform} onCanvasClick={handleCanvasClick} onShiftClick={handleShiftClick} onDimensionsChange={handleCanvasDimensionsChange} modalOpen={modalOpen} />
       </div>
 
-      {/* Event Panel - Remaining flex space (no relationships panel) */}
-      <div className="flex-1 h-full">
-        <EventPanel selectedEvent={selectedEvent} events={filteredEvents} visibleEvents={visibleEvents} transform={transform} onEventClick={handleEventClick} onShiftClickImage={handleShiftClickImage} onTransformChange={handleTimelineTransform} onDisplayedEventsChange={handleDisplayedEventsChange} cardHeightPx={uiConfig.cardHeightPx} cardViewportPaddingPx={uiConfig.cardViewportPaddingPx} imagePaddingPx={uiConfig.imagePaddingPx} onCategoryFilter={handleCategoryFilter} categoryFilter={categoryFilter} />
+      {/* Event Panel - Always visible */}
+      <div className="h-full flex-1">
+        <EventPanel selectedEvent={selectedEvent} events={filteredEvents} visibleEvents={visibleEvents} transform={transform} onEventClick={handleEventClick} onShiftClickImage={handleShiftClickImage} onTransformChange={handleTimelineTransform} onDisplayedEventsChange={handleDisplayedEventsChange} cardHeightPx={uiConfig.cardHeightPx} cardViewportPaddingPx={uiConfig.cardViewportPaddingPx} imagePaddingPx={uiConfig.imagePaddingPx} onCategoryFilter={handleCategoryFilter} categoryFilter={categoryFilter} onHorizontalSwipe={handleHorizontalSwipe} />
       </div>
 
-      {/* Geolocation Map - Right side full height */}
-      <div className="h-full flex-shrink-0 relative" style={{ width: `${uiConfig.mapWidthPercent}%`, zIndex: 1 }}>
+      {/* Geolocation Map - Narrow screens: conditional visibility, Wide screens: always visible */}
+      <div
+        className={`h-full flex-shrink-0 relative map-container ${
+          mobileView === 'map' ? '' : 'hidden'
+        }`}
+        style={{
+          width: `${uiConfig.mapWidthPercent}%`,
+          zIndex: 1
+        }}
+      >
         <Suspense fallback={<div className="w-full h-full flex items-center justify-center bg-gray-800"><p>Loading map...</p></div>}>
           <GeoMap
             events={displayedCardEvents}
@@ -447,6 +485,25 @@ export default function Home() {
         onEditingLocationModeChange={setEditingLocationMode}
         canEdit={canEdit}
       />
+
+      {/* Responsive styles */}
+      <style jsx>{`
+        /* Wide screens: always show full timeline and map */
+        @media (min-width: ${uiConfig.responsiveBreakpointPx}px) {
+          .timeline-container {
+            width: var(--timeline-full-width) !important;
+          }
+          .map-container {
+            display: block !important;
+          }
+        }
+        /* Narrow screens: full width in timeline view, sliver otherwise */
+        @media (max-width: ${uiConfig.responsiveBreakpointPx - 1}px) {
+          .timeline-container {
+            width: ${mobileView === 'timeline' ? 'var(--timeline-full-width)' : 'var(--timeline-sliver-width)'} !important;
+          }
+        }
+      `}</style>
     </main>
   );
 }
