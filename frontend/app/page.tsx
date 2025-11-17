@@ -92,8 +92,8 @@ export default function Home() {
 
     if (!isNaN(y) && !isNaN(k)) {
       // Check if transform is unreasonable (likely corrupted/extreme values)
-      // If k is very large (>1e10) or y is extreme, reset to default instead
-      const isUnreasonable = k > 1e10 || Math.abs(y) > 1e13;
+      // Allow very large k values for viewing extreme past (Big Bang era)
+      const isUnreasonable = k > 1e19 || Math.abs(y) > 5e17;
 
       if (isUnreasonable) {
         // Reset to default - redirect to clean URL
@@ -102,9 +102,9 @@ export default function Home() {
       }
 
       // Clamp zoom and y to reasonable ranges to prevent performance issues
-      const clampedK = Math.max(1, Math.min(1e12, k));
-      // Clamp y to prevent extreme off-screen positions
-      const clampedY = Math.max(-1e14, Math.min(1e14, y));
+      const clampedK = Math.max(1, Math.min(1e18, k));
+      // Clamp y to prevent extreme off-screen positions (allow up to Big Bang timestamp)
+      const clampedY = Math.max(-5e17, Math.min(1e15, y));
 
       // If values were clamped, update URL to reflect the clamped values
       if (clampedY !== y || clampedK !== k) {

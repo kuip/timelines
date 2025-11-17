@@ -1,0 +1,308 @@
+[
+  {
+    "event_id_a": "hadean-eon-start",
+    "event_id_b": "hadean-eon-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "hadean-eon-end",
+    "event_id_b": "archean-eon-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "archean-eon-start",
+    "event_id_b": "archean-eon-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "archean-eon-end",
+    "event_id_b": "proterozoic-eon-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "proterozoic-eon-start",
+    "event_id_b": "proterozoic-eon-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "proterozoic-eon-end",
+    "event_id_b": "phanerozoic-eon-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "phanerozoic-eon-start",
+    "event_id_b": "paleozoic-era-start",
+    "relationship_type": "contains",
+    "weight": 100
+  },
+  {
+    "event_id_a": "paleozoic-era-start",
+    "event_id_b": "paleozoic-era-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "paleozoic-era-start",
+    "event_id_b": "cambrian-period-start",
+    "relationship_type": "contains",
+    "weight": 100
+  },
+  {
+    "event_id_a": "cambrian-period-start",
+    "event_id_b": "cambrian-period-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "cambrian-period-end",
+    "event_id_b": "ordovician-period-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "ordovician-period-start",
+    "event_id_b": "ordovician-period-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "ordovician-period-end",
+    "event_id_b": "silurian-period-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "silurian-period-start",
+    "event_id_b": "silurian-period-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "silurian-period-end",
+    "event_id_b": "devonian-period-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "devonian-period-start",
+    "event_id_b": "devonian-period-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "devonian-period-end",
+    "event_id_b": "carboniferous-period-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "carboniferous-period-start",
+    "event_id_b": "carboniferous-period-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "carboniferous-period-end",
+    "event_id_b": "permian-period-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "permian-period-start",
+    "event_id_b": "permian-period-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "permian-period-end",
+    "event_id_b": "paleozoic-era-end",
+    "relationship_type": "causes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "paleozoic-era-end",
+    "event_id_b": "mesozoic-era-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "mesozoic-era-start",
+    "event_id_b": "mesozoic-era-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "mesozoic-era-start",
+    "event_id_b": "triassic-period-start",
+    "relationship_type": "contains",
+    "weight": 100
+  },
+  {
+    "event_id_a": "triassic-period-start",
+    "event_id_b": "triassic-period-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "triassic-period-end",
+    "event_id_b": "jurassic-period-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "jurassic-period-start",
+    "event_id_b": "jurassic-period-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "jurassic-period-end",
+    "event_id_b": "cretaceous-period-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "cretaceous-period-start",
+    "event_id_b": "cretaceous-period-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "cretaceous-period-end",
+    "event_id_b": "mesozoic-era-end",
+    "relationship_type": "causes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "mesozoic-era-end",
+    "event_id_b": "cenozoic-era-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "cenozoic-era-start",
+    "event_id_b": "paleogene-period-start",
+    "relationship_type": "contains",
+    "weight": 100
+  },
+  {
+    "event_id_a": "paleogene-period-start",
+    "event_id_b": "paleogene-period-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "paleogene-period-start",
+    "event_id_b": "paleocene-epoch-start",
+    "relationship_type": "contains",
+    "weight": 100
+  },
+  {
+    "event_id_a": "paleocene-epoch-start",
+    "event_id_b": "paleocene-epoch-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "paleocene-epoch-end",
+    "event_id_b": "eocene-epoch-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "eocene-epoch-start",
+    "event_id_b": "eocene-epoch-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "eocene-epoch-end",
+    "event_id_b": "oligocene-epoch-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "oligocene-epoch-start",
+    "event_id_b": "oligocene-epoch-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "oligocene-epoch-end",
+    "event_id_b": "paleogene-period-end",
+    "relationship_type": "causes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "paleogene-period-end",
+    "event_id_b": "neogene-period-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "neogene-period-start",
+    "event_id_b": "neogene-period-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "neogene-period-start",
+    "event_id_b": "miocene-epoch-start",
+    "relationship_type": "contains",
+    "weight": 100
+  },
+  {
+    "event_id_a": "miocene-epoch-start",
+    "event_id_b": "miocene-epoch-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "miocene-epoch-end",
+    "event_id_b": "pliocene-epoch-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "pliocene-epoch-start",
+    "event_id_b": "pliocene-epoch-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "pliocene-epoch-end",
+    "event_id_b": "neogene-period-end",
+    "relationship_type": "causes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "neogene-period-end",
+    "event_id_b": "quaternary-period-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  },
+  {
+    "event_id_a": "quaternary-period-start",
+    "event_id_b": "pleistocene-epoch-start",
+    "relationship_type": "contains",
+    "weight": 100
+  },
+  {
+    "event_id_a": "pleistocene-epoch-start",
+    "event_id_b": "pleistocene-epoch-end",
+    "relationship_type": "span",
+    "weight": 100
+  },
+  {
+    "event_id_a": "pleistocene-epoch-end",
+    "event_id_b": "holocene-epoch-start",
+    "relationship_type": "precedes",
+    "weight": 100
+  }
+]

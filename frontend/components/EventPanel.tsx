@@ -319,7 +319,6 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
       if (!panelRef.current) return;
 
       const newHeight = panelRef.current.clientHeight;
-      console.log('EventPanel: updateDimensions called, clientHeight=', newHeight);
       setDimensions({
         height: newHeight,
       });
@@ -413,8 +412,6 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
   const displayableEvents = useMemo(() => {
     const START_TIME = -435494878264400000;
 
-    console.log('EventPanel: visibleEvents=', visibleEvents.length, 'dimensions.height=', dimensions.height);
-
     // Filter visible events to exclude those beyond Future Horizon
     const filteredVisibleEvents = visibleEvents.filter((event) => {
       const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
@@ -435,8 +432,6 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
       allVisibleEvents.push(futureHorizonEvent);
     }
 
-    console.log('EventPanel: allVisibleEvents=', allVisibleEvents.length);
-
     if (allVisibleEvents.length === 0) return [];
 
     const positions = allVisibleEvents.map((event) => ({
@@ -446,7 +441,6 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
 
     const displayableIds = getDisplayableEvents(positions, dimensions.height);
     const result = positions.filter(({ event }) => displayableIds.has(event.id)).map(({ event }) => event);
-    console.log('EventPanel: displayableEvents=', result.length);
     return result;
   }, [visibleEventIdsStr, dimensions.height]);
 

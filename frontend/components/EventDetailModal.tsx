@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { EventResponse } from '@/types';
 import { eventsApi } from '@/lib/api';
 import { getIconForUrl } from '@/lib/socialNetworks';
+import { apiCache } from '@/lib/apiCache';
 
 interface CategoryChild {
   id: string;
@@ -170,11 +171,17 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
 
               apiUrl = apiUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
-              // Fetch relationships
-              console.log('Fetching relationships for event', event.id, 'from', apiUrl);
-              const relResponse = await fetch(`${apiUrl}/api/events/${event.id}/relationships`);
-              if (relResponse.ok) {
-                const data = await relResponse.json();
+              // Fetch relationships with caching
+              try {
+                const data = await apiCache.fetch(
+                  `relationships:${event.id}`,
+                  async () => {
+                    const response = await fetch(`${apiUrl}/api/events/${event.id}/relationships`);
+                    if (!response.ok) throw new Error('Failed to fetch relationships');
+                    return response.json();
+                  },
+                  5 * 60 * 1000 // 5 minutes
+                );
                 // Deduplicate related event IDs using a Set
                 const relatedIdsSet = new Set(
                   data.relationships?.map((rel: any) => {
@@ -183,25 +190,29 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                   }) || []
                 );
                 const relatedIds = Array.from(relatedIdsSet) as string[];
-                console.log('Found related events:', relatedIds);
                 setFormData((prev) => ({
                   ...prev,
                   related_event_ids: relatedIds,
                 }));
-              } else {
-                console.warn('Failed to fetch relationships, status:', relResponse.status);
+              } catch (err) {
+                console.warn('Failed to fetch relationships:', err);
               }
 
-              // Fetch locations (with cache busting to ensure fresh data)
-              console.log('Fetching locations for event', event.id);
-              const locResponse = await fetch(`${apiUrl}/api/events/${event.id}/locations?t=${Date.now()}`);
-              if (locResponse.ok) {
-                const locData = await locResponse.json();
+              // Fetch locations with caching
+              try {
+                const locData = await apiCache.fetch(
+                  `locations:${event.id}`,
+                  async () => {
+                    const response = await fetch(`${apiUrl}/api/events/${event.id}/locations`);
+                    if (!response.ok) throw new Error('Failed to fetch locations');
+                    return response.json();
+                  },
+                  2 * 60 * 1000 // 2 minutes (shorter TTL for locations as they change more often)
+                );
                 if (locData.locations && locData.locations.length > 0) {
                   const primaryLocation = locData.locations.find((loc: any) => loc.is_primary) || locData.locations[0];
                   if (primaryLocation && primaryLocation.geojson?.type === 'Point') {
                     const [lng, lat] = primaryLocation.geojson.coordinates;
-                    console.log('Found location:', { lat, lng });
                     setFormData((prev) => ({
                       ...prev,
                       location_latitude: lat,
@@ -210,8 +221,8 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                     }));
                   }
                 }
-              } else {
-                console.warn('Failed to fetch locations, status:', locResponse.status);
+              } catch (err) {
+                console.warn('Failed to fetch locations:', err);
               }
             } catch (err) {
               console.warn('Failed to fetch event data:', err);
@@ -284,6 +295,10 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
             image_url: formData.image_url,
             related_event_ids: formData.related_event_ids,
           });
+
+          // Invalidate caches for this event and related events
+          apiCache.invalidate(`relationships:${event.id}`);
+          apiCache.invalidate(`locations:${event.id}`);
         }
 
         // If location coordinates were edited, save them
@@ -318,13 +333,11 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
             if (!locationResponse.ok) {
               console.warn('Failed to save location, but event was saved');
             } else {
-              console.log('Location saved successfully');
               // Fetch the updated location data to refresh the cache
               try {
                 const updatedLocResponse = await fetch(`${apiUrl}/api/events/${savedEvent.id}/locations`);
                 if (updatedLocResponse.ok) {
-                  const locData = await updatedLocResponse.json();
-                  console.log('Refreshed location cache:', locData);
+                  await updatedLocResponse.json();
                 }
               } catch (err) {
                 console.warn('Failed to refresh location cache:', err);
