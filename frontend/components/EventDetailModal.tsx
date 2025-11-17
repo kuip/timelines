@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { EventResponse } from '@/types';
 import { eventsApi } from '@/lib/api';
+import { getIconForUrl } from '@/lib/socialNetworks';
 
 interface CategoryChild {
   id: string;
@@ -442,10 +443,15 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
       <div style={{ position: 'fixed', inset: 0, zIndex: isOpen ? 50 : -1, pointerEvents: 'none' }}>
         <div style={{ pointerEvents: 'none' }} />
 
-        {/* Modal */}
+        {/* Modal - Full height, responsive left positioning */}
         <div
-          className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-stone-200 dark:bg-gray-800 rounded-lg shadow-2xl z-50 w-11/12 max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
-          style={{ pointerEvents: 'auto' }}
+          className="fixed top-0 bg-stone-200 dark:bg-gray-800 shadow-2xl z-50 overflow-hidden flex flex-col"
+          style={{
+            pointerEvents: 'auto',
+            left: window.innerWidth >= 1200 ? '400px' : (window.innerWidth < 768 ? '40px' : '150px'),
+            right: window.innerWidth >= 1200 ? '300px' : 0,
+            height: '100vh'
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header with close button */}
@@ -801,7 +807,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                               className="block text-sm text-blue-400 hover:text-blue-300 underline"
                               title={source.url}
                             >
-                              📖 {source.title || source.source_type}
+                              {getIconForUrl(source.url)} {source.title || source.source_type}
                             </a>
                           ) : null
                         ))}

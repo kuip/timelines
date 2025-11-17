@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { EventResponse } from '@/types';
 import { useTheme } from '@/lib/ThemeProvider';
+import { SOCIAL_NETWORKS } from '@/lib/socialNetworks';
 
 interface EventLocation {
   id: string;
@@ -220,8 +221,10 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
           shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
         });
 
-        // Initialize map
-        const map = L.map(mapContainer.current).setView([20, 0], 2);
+        // Initialize map without zoom control
+        const map = L.map(mapContainer.current, {
+          zoomControl: false
+        }).setView([20, 0], 2);
         mapRef.current = map;
 
         // Use standard OSM tiles with borders and invert for dark mode
@@ -623,17 +626,89 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
     };
   }, [mapReady]);
 
+  // Count sources for each social network from displayed events
+  const sourceCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    events.forEach(event => {
+      if (event.sources && Array.isArray(event.sources)) {
+        event.sources.forEach(source => {
+          if (source.url) {
+            // Check which domain this source belongs to
+            SOCIAL_NETWORKS.forEach(network => {
+              if (source.url.toLowerCase().includes(network.domain.toLowerCase().replace('https://', '').replace('http://', ''))) {
+                counts.set(network.domain, (counts.get(network.domain) || 0) + 1);
+              }
+            });
+          }
+        });
+      }
+    });
+
+    return counts;
+  }, [events]);
+
   return (
     <div className="h-full flex flex-col bg-white dark:bg-gray-900 border-l border-gray-200 dark:border-gray-800">
-      <div className="bg-gray-100 dark:bg-gray-800 px-4 py-2 border-b border-gray-200 dark:border-gray-700">
-        <h2 className="text-sm font-semibold">Geolocation Map</h2>
-        {loading && <p className="text-xs text-gray-500 dark:text-gray-400">Loading locations...</p>}
-        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+      {/* Heading - 40px height */}
+      <div className="bg-gray-100 dark:bg-gray-800 px-4 border-b border-gray-200 dark:border-gray-700 flex items-center" style={{ height: '40px' }}>
+        {loading && <p className="text-xs text-gray-500 dark:text-gray-400" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>Loading locations...</p>}
+        {error && <p className="text-xs text-red-600 dark:text-red-400" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>{error}</p>}
         {!loading && !error && (
-          <p className="text-xs text-gray-500 dark:text-gray-400">{locations.length} location{locations.length !== 1 ? 's' : ''}</p>
+          <h2 className="text-sm font-semibold" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
+            {locations.length} spot{locations.length !== 1 ? 's' : ''}
+          </h2>
         )}
       </div>
 
+      {/* Social Networks Grid */}
+      <div className="bg-gray-50 dark:bg-gray-900 px-2 py-2 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex flex-wrap gap-2 justify-center">
+          {SOCIAL_NETWORKS.map((network) => {
+            const count = sourceCounts.get(network.domain) || 0;
+            return (
+              <a
+                key={network.name}
+                href={network.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center rounded cursor-pointer hover:opacity-70 transition-opacity relative"
+                style={{
+                  width: '32px',
+                  height: '32px',
+                  backgroundColor: theme === 'dark' ? '#1F2937' : '#E5E7EB',
+                  color: theme === 'dark' ? '#9CA3AF' : network.color,
+                  fontFamily: '"Roboto Condensed", sans-serif',
+                  textDecoration: 'none',
+                  fontSize: '18px',
+                  fontWeight: 'bold'
+                }}
+                title={`${network.name}${count > 0 ? ` (${count} source${count !== 1 ? 's' : ''})` : ''}`}
+              >
+                {network.icon}
+                {count > 0 && (
+                  <span style={{
+                    position: 'absolute',
+                    top: '2px',
+                    right: '2px',
+                    fontSize: '9px',
+                    fontWeight: 'bold',
+                    color: theme === 'dark' ? '#60A5FA' : '#3B82F6',
+                    backgroundColor: theme === 'dark' ? 'rgba(0, 0, 0, 0.7)' : 'rgba(255, 255, 255, 0.9)',
+                    borderRadius: '4px',
+                    padding: '0 2px',
+                    lineHeight: '1'
+                  }}>
+                    {count}
+                  </span>
+                )}
+              </a>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Geo Map */}
       <div
         ref={mapContainer}
         className="flex-1 bg-gray-100 dark:bg-gray-900"
