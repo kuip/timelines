@@ -1,103 +1,103 @@
 {
   "zoomThresholds": [
     {
-      "name": "Minute (1 minute per tick)",
-      "k": 417252324585586,
-      "unit": "minute",
-      "seconds": 60,
-      "quantity": 1,
-      "precision": "minute",
-      "minPixelSpacing": 0.5
-    },
-    {
-      "name": "Minute (5 minute per tick)",
-      "k": 226191427554559,
-      "unit": "minute",
-      "seconds": 300,
-      "quantity": 5,
-      "precision": "minute",
-      "minPixelSpacing": 0.5
-    },
-    {
-      "name": "Hour (1 hour per tick)",
-      "k": 4357859548091,
-      "unit": "hour",
-      "seconds": 3600,
-      "quantity": 1,
-      "precision": "hour",
-      "minPixelSpacing": 0.5
-    },
-    {
-      "name": "Day (1 day per tick)",
-      "k": 195537857851,
-      "unit": "day",
-      "seconds": 86400,
-      "quantity": 1,
-      "precision": "day",
-      "minPixelSpacing": 0.5
-    },
-    {
-      "name": "Month (1 month per tick)",
-      "k": 12871912291,
-      "unit": "month",
-      "seconds": 2628000,
-      "quantity": 1,
-      "precision": "month",
-      "minPixelSpacing": 0.5
-    },
-    {
-      "name": "Year (1 year per tick)",
-      "k": 900448598,
-      "unit": "year",
-      "seconds": 31536000,
-      "quantity": 1,
-      "precision": "year",
-      "minPixelSpacing": 0.5
-    },
-    {
-      "name": "Century (100 years per tick)",
-      "k": 17454140,
-      "unit": "century",
-      "seconds": 3153600000,
-      "quantity": 1,
-      "precision": "century",
-      "minPixelSpacing": 0.5
-    },
-    {
-      "name": "1 Ky (1000 years per tick)",
-      "k": 1329357,
-      "unit": "k years",
-      "seconds": 31536000000,
-      "quantity": 1,
-      "precision": "century",
-      "minPixelSpacing": 0.5
-    },
-    {
-      "name": "10 Ky (10000 years per tick)",
-      "k": 120,
-      "unit": "k years",
-      "seconds": 315360000000,
-      "quantity": 10,
-      "precision": "century",
-      "minPixelSpacing": 0.5
-    },
-    {
       "name": "10 My (10 million years per tick)",
-      "k": 118,
+      "k": 6307200000000,
       "unit": "M years",
       "seconds": 315360000000000,
       "quantity": 10,
       "precision": "century",
-      "minPixelSpacing": 0.5
+      "minPixelSpacing": 24
+    },
+    {
+      "name": "10 Ky (10000 years per tick)",
+      "k": 6307200000,
+      "unit": "k years",
+      "seconds": 315360000000,
+      "quantity": 10,
+      "precision": "century",
+      "minPixelSpacing": 24
+    },
+    {
+      "name": "1 Ky (1000 years per tick)",
+      "k": 630720000,
+      "unit": "k years",
+      "seconds": 31536000000,
+      "quantity": 1,
+      "precision": "century",
+      "minPixelSpacing": 24
+    },
+    {
+      "name": "Century (100 years per tick)",
+      "k": 63072000,
+      "unit": "century",
+      "seconds": 3153600000,
+      "quantity": 1,
+      "precision": "century",
+      "minPixelSpacing": 24
+    },
+    {
+      "name": "Year (1 year per tick)",
+      "k": 630720,
+      "unit": "year",
+      "seconds": 31536000,
+      "quantity": 1,
+      "precision": "year",
+      "minPixelSpacing": 24
+    },
+    {
+      "name": "Month (1 month per tick)",
+      "k": 52560,
+      "unit": "month",
+      "seconds": 2628000,
+      "quantity": 1,
+      "precision": "month",
+      "minPixelSpacing": 24
+    },
+    {
+      "name": "Day (1 day per tick)",
+      "k": 1728,
+      "unit": "day",
+      "seconds": 86400,
+      "quantity": 1,
+      "precision": "day",
+      "minPixelSpacing": 24
+    },
+    {
+      "name": "Hour (1 hour per tick)",
+      "k": 72,
+      "unit": "hour",
+      "seconds": 3600,
+      "quantity": 1,
+      "precision": "hour",
+      "minPixelSpacing": 24
+    },
+    {
+      "name": "Minute (5 minute per tick)",
+      "k": 6,
+      "unit": "minute",
+      "seconds": 300,
+      "quantity": 5,
+      "precision": "minute",
+      "minPixelSpacing": 24
+    },
+    {
+      "name": "Minute (1 minute per tick)",
+      "k": 1,
+      "unit": "minute",
+      "seconds": 60,
+      "quantity": 1,
+      "precision": "minute",
+      "minPixelSpacing": 24
     },
     {
       "name": "Default fallback",
-      "k": 8,
+      "k": 0,
       "unit": "auto",
       "seconds": 0,
       "quantity": 0,
       "precision": "century",
-      "minPixelSpacing": 32
+      "minPixelSpacing": 24
     }
   ]
 }

@@ -98,14 +98,20 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
       const rect = panel.getBoundingClientRect();
       const mouseY = e.clientY - rect.top;
 
+      // Calculate the timestamp at the mouse position (before zoom)
+      const referenceY = panel.clientHeight / 3;
+      const pixelOffset = mouseY - referenceY;
+      const timestampAtMouse = transform.y - (pixelOffset * transform.k);
+
       // Same zoom sensitivity as canvas
       const delta = e.deltaY > 0 ? 1.033 : 0.967;
       const newK = Math.max(1, Math.min(1e18, transform.k * delta));
 
-      const oldWorldY = (transform.y - mouseY) / transform.k;
+      // Keep the same timestamp at the mouse position after zoom
+      const newReferenceTimestamp = timestampAtMouse + (pixelOffset * newK);
 
       const newTransform = {
-        y: oldWorldY * newK + mouseY,
+        y: newReferenceTimestamp,
         k: newK
       };
 
@@ -123,9 +129,12 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
       if (!dragStateRef.current.isDragging) return;
 
       const deltaY = e.clientY - dragStateRef.current.lastY;
+      // Panning: dragging down pulls timeline down (shows future), dragging up pulls timeline up (shows past)
+      const timestampDelta = deltaY * transform.k;
+
       const newTransform = {
         ...transform,
-        y: transform.y + deltaY
+        y: transform.y + timestampDelta
       };
 
       onTransformChange(newTransform);
@@ -193,17 +202,23 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
         const centerY = ((touch1.clientY + touch2.clientY) / 2) - rect.top;
 
         const scale = distance / touchStateRef.current.initialDistance!;
+        // Invert scale: pinching out (scale > 1) should zoom out (increase k)
+        // pinching in (scale < 1) should zoom in (decrease k)
+        const invertedScale = 1 / scale;
         // Reduce zoom sensitivity on touch devices - apply dampening
         const dampening = 0.3; // Lower = less sensitive
-        const adjustedScale = 1 + (scale - 1) * dampening;
+        const adjustedScale = 1 + (invertedScale - 1) * dampening;
         const newK = Math.max(1, Math.min(1e18, touchStateRef.current.initialK! * adjustedScale));
 
         // Zoom around the CURRENT center point between fingers (not the initial one)
         // This ensures the point between your fingers stays fixed as you zoom
-        const oldWorldY = (transform.y - centerY) / transform.k;
+        const panelReferenceY = panel.clientHeight / 3;
+        const pixelOffset = centerY - panelReferenceY;
+        const timestampAtTouch = transform.y - (pixelOffset * transform.k);
+        const newReferenceTimestamp = timestampAtTouch + (pixelOffset * newK);
 
         const newTransform = {
-          y: oldWorldY * newK + centerY,
+          y: newReferenceTimestamp,
           k: newK
         };
 
@@ -244,10 +259,12 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
             // If no swipe detected, do normal pan
             if (!touchStateRef.current.swipeDetected) {
               const deltaY = currentY - touchStateRef.current.lastY!;
+              // Panning: dragging down pulls timeline down (shows future), dragging up pulls timeline up (shows past)
+              const timestampDelta = deltaY * transform.k;
 
               const newTransform = {
                 ...transform,
-                y: transform.y + deltaY
+                y: transform.y + timestampDelta
               };
 
               onTransformChange(newTransform);

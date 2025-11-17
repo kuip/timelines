@@ -346,12 +346,23 @@ export const generateCalendarTicks = (
         const bottomMonth = bottomDate.getUTCMonth();
         const topYear = topDate.getUTCFullYear();
         const topMonth = topDate.getUTCMonth();
+        const visibleRange = maxSeconds - minSeconds;
+
+        // Calculate month interval based on available space
+        let monthInterval = 1;
+        if (timelineHeight > 0) {
+          const pixelsPerMonth = (2628000 / visibleRange) * timelineHeight;
+          if (pixelsPerMonth < Math.max(minPixelSpacing, 24)) {
+            // If pixels per month is less than min spacing, increase interval
+            monthInterval = Math.ceil(Math.max(minPixelSpacing, 24) / pixelsPerMonth);
+          }
+        }
 
         for (let year = bottomYear; year <= topYear; year++) {
           const startMonth = year === bottomYear ? bottomMonth : 0;
           const endMonth = year === topYear ? topMonth : 11;
 
-          for (let month = startMonth; month <= endMonth; month++) {
+          for (let month = startMonth; month <= endMonth; month += monthInterval) {
             const tickDate = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0));
             const tickSeconds = tickDate.getTime() / 1000;
             ticksToRender.push(tickSeconds);
@@ -379,30 +390,19 @@ export const generateFixedUnitTicks = (
   let actualUnitSeconds = unitSeconds;
   let subdivisions = 1; // 1 means no subdivisions (whole units)
 
-  // If we have timeline height info, calculate if we need a multiplier or subdivisions
-  // Exception: if unitSeconds is 10000 * 31536000 (1 Ky), 100 * 31536000 (century), 31536000 (year), 31536000/12 (month), 86400 (day), or 3600 (hour), never apply multiplier
-  const isOneKyUnit = Math.abs(unitSeconds - (10000 * 31536000)) < 1;
-  const isCenturyUnit = Math.abs(unitSeconds - (100 * 31536000)) < 1;
-  const isYearUnit = Math.abs(unitSeconds - 31536000) < 1;
-  const isMonthUnit = Math.abs(unitSeconds - (31536000 / 12)) < 1;
-  const isDayUnit = Math.abs(unitSeconds - 86400) < 1;
-  const isHourUnit = Math.abs(unitSeconds - 3600) < 1;
-  const isMagicUnit = isOneKyUnit || isCenturyUnit || isYearUnit || isMonthUnit || isDayUnit || isHourUnit;
-
   if (timelineHeight > 0) {
     const visibleRange = topSeconds - bottomSeconds;
     const pixelsPerUnit = (unitSeconds / visibleRange) * timelineHeight;
 
-    // Always ensure minimum visual spacing between ticks
-    // This prevents visual clutter at extreme zoom levels
-    // Exception: Don't enforce this for special units (1 Ky, century) that use calendar generation
-    const MIN_VISUAL_SPACING = Math.max(20, minPixelSpacing);
+    // ALWAYS ensure minimum visual spacing between ticks
+    // This prevents visual clutter at all zoom levels
+    const MIN_VISUAL_SPACING = Math.max(24, minPixelSpacing);
 
-    if (!isMagicUnit && pixelsPerUnit < MIN_VISUAL_SPACING) {
+    if (pixelsPerUnit < MIN_VISUAL_SPACING) {
       // If spacing is less than minimum, increase the unit multiplier
       const multiplier = Math.ceil(MIN_VISUAL_SPACING / pixelsPerUnit);
       actualUnitSeconds = unitSeconds * multiplier;
-    } else if (!isMagicUnit && pixelsPerUnit > minPixelSpacing * 3 && minPixelSpacing >= 1) {
+    } else if (pixelsPerUnit > minPixelSpacing * 3 && minPixelSpacing >= 1) {
       // If spacing is much larger than needed, use subdivisions (0.5, 0.25, etc)
       const pixelsPerSubdivision = pixelsPerUnit / 2;
       if (pixelsPerSubdivision >= minPixelSpacing * 0.5) {

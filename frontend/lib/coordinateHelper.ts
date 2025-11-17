@@ -12,9 +12,14 @@ const END_TIME = 435457000000000000;   // Far future (not used as the actual lim
  * Calculate Y position for an event based on its unix timestamp
  * This function is used by BOTH the canvas and HTML cards to ensure perfect alignment
  *
+ * New simplified coordinate system:
+ * - y: Unix timestamp at the reference point (1/3 from top of screen)
+ * - k: Zoom factor (seconds per pixel) - higher = more zoomed out
+ * - Timeline direction: PAST is DOWN (higher Y), FUTURE is UP (lower Y)
+ *
  * @param unixSeconds - The event's unix timestamp
  * @param timelineHeight - Height of the timeline (in pixels)
- * @param transform - Pan and zoom transform { y, k }
+ * @param transform - Pan and zoom transform { y: referenceTimestamp, k: secondsPerPixel }
  * @returns Y position in pixels
  */
 export const calculateEventY = (
@@ -22,11 +27,17 @@ export const calculateEventY = (
   timelineHeight: number,
   transform: { y: number; k: number }
 ): number => {
-  const margin = 0; // No margin - timeline spans full height
-  const timelineTop = margin;
   const numSeconds = typeof unixSeconds === 'number' ? unixSeconds : parseInt(unixSeconds as any);
 
-  return timelineTop + ((END_TIME - numSeconds) / (END_TIME - START_TIME)) * timelineHeight * transform.k + transform.y;
+  // y is the timestamp at the reference point (1/3 from top)
+  // k is seconds per pixel (zoom factor)
+  // Calculate pixel offset from reference point
+  // NEGATIVE because past (smaller timestamps) should be DOWN (higher Y values)
+  const referenceY = timelineHeight / 3;
+  const timestampOffset = numSeconds - transform.y;
+  const pixelOffset = -timestampOffset / transform.k;
+
+  return referenceY + pixelOffset;
 };
 
 /**

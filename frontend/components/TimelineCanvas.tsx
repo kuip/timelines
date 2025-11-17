@@ -76,6 +76,12 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
   const [localTransform, setLocalTransform] = useState<Transform>(initialTransform || { y: 0, k: 1 });
   const transform = propsTransform || localTransform;
 
+  // Use ref to always have current transform in event handlers
+  const transformRef = useRef(transform);
+  useEffect(() => {
+    transformRef.current = transform;
+  }, [transform]);
+
   // Update transform - either through parent callback or local state
   const updateTransform = (newTransform: Transform) => {
     if (propsTransform && onTransformChange) {
@@ -127,17 +133,42 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
       // At extreme zoom levels, use time-based visibility instead of Y-coordinate
       // because floating-point precision breaks down with huge multiplications
       if (transform.k > 1e6) {
-        // For extreme zoom, calculate the visible time range
-        const visibleTimeSpan = (END_TIME - START_TIME) / transform.k;
-        const topTime = END_TIME - (Math.abs(transform.y) / timelineHeight) * visibleTimeSpan + timelineHeight * visibleTimeSpan / timelineHeight;
-        const bottomTime = END_TIME - (Math.abs(transform.y) + timelineHeight) / timelineHeight * visibleTimeSpan - timelineHeight * visibleTimeSpan / timelineHeight;
+        // Calculate visible time range using the same coordinate system
+        const referenceY = timelineHeight / 3;
+        const topTime = transform.y + (referenceY * transform.k); // Top of screen (Y=0)
+        const bottomTime = transform.y - ((timelineHeight - referenceY) * transform.k); // Bottom of screen
 
-        return unixSeconds >= Math.min(topTime, bottomTime) && unixSeconds <= Math.max(topTime, bottomTime);
+        const isInTimeRange = unixSeconds >= Math.min(topTime, bottomTime) && unixSeconds <= Math.max(topTime, bottomTime);
+
+        // Debug: Log Big Bang event specifically
+        if (event.title === 'Big Bang') {
+          console.log('Big Bang visibility check (extreme zoom):', {
+            unixSeconds,
+            transform,
+            topTime,
+            bottomTime,
+            isInTimeRange
+          });
+        }
+
+        return isInTimeRange;
       }
 
       // For normal zoom levels, use the standard Y-coordinate check
-      const y = timelineTop + ((END_TIME - unixSeconds) / (END_TIME - START_TIME)) * timelineHeight * transform.k + transform.y;
+      const y = calculateEventY(unixSeconds, timelineHeight, transform);
       const isVisible = y >= 0 && y <= dimensions.height;
+
+      // Debug: Log Big Bang event specifically
+      if (event.title === 'Big Bang') {
+        console.log('Big Bang visibility check (normal zoom):', {
+          unixSeconds,
+          transform,
+          y,
+          timelineHeight,
+          dimensionsHeight: dimensions.height,
+          isVisible
+        });
+      }
 
       return isVisible;
     });
@@ -361,9 +392,12 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     // Future Horizon marker removed
 
     // Draw ticks and labels
-    const visibleRange = (END_TIME - START_TIME) / transform.k;
-    const topSeconds = END_TIME - (Math.abs(transform.y) / timelineHeight) * visibleRange + timelineHeight * visibleRange / timelineHeight;
-    const bottomSeconds = END_TIME - (Math.abs(transform.y) + timelineHeight) / timelineHeight * visibleRange - timelineHeight * visibleRange / timelineHeight;
+    // Calculate visible time range from transform
+    // Past is DOWN (higher Y), future is UP (lower Y)
+    const referenceY = timelineHeight / 3;
+    const topSeconds = transform.y + (referenceY * transform.k); // Top of screen (Y=0) is future
+    const bottomSeconds = transform.y - ((timelineHeight - referenceY) * transform.k); // Bottom is past
+    const visibleRange = Math.abs(topSeconds - bottomSeconds);
 
     // Select unit based on zoom level using JSON thresholds
     const result = selectDisplayUnit(visibleRange, timelineHeight, 32);
@@ -372,12 +406,13 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     let unitIndexToDisplay;
     let tickMinSpacing = 32; // Default
 
-    // Find the first threshold where k is greater than the threshold value
+    // Find the first threshold where k is greater than or equal to the threshold value
+    // Thresholds are ordered from largest k to smallest k
     let matchedThreshold = null;
     for (const threshold of thresholds) {
-      if (transform.k > threshold.k) {
+      if (transform.k >= threshold.k) {
         matchedThreshold = threshold;
-        tickMinSpacing = threshold.minPixelSpacing; // Update the variable
+        tickMinSpacing = threshold.minPixelSpacing;
         break;
       }
     }
@@ -404,6 +439,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     if (unitToDisplay.precision === 'century') {
       // For centuries, check if we should show decade ticks
       // Calculate spacing between decade ticks
+      // NOTE: bottomSeconds is in the past (smaller timestamp), topSeconds is in the future (larger timestamp)
       const decadeTicks = generateCalendarTicks(bottomSeconds, topSeconds, 'century', timelineHeight, tickMinSpacing);
       if (decadeTicks.length >= 2) {
         const y1 = yScale(decadeTicks[0]);
@@ -431,15 +467,10 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
     const pixelsPerUnit = (unitToDisplay.seconds / visibleRange) * timelineHeight;
 
-    // Always draw ticks if we have them, regardless of spacing
+    // Always draw ticks if we have them, with minimum spacing constraints
     if (ticksToRender.length > 0) {
-      // Calculate actual spacing between rendered ticks
-      let pixelsPerTick = 0;
-      if (ticksToRender.length >= 2) {
-        const y1 = yScale(ticksToRender[0]);
-        const y2 = yScale(ticksToRender[1]);
-        pixelsPerTick = Math.abs(y2 - y1);
-      }
+      const MIN_LABEL_SPACING = 100; // Minimum 100px between labels
+      let lastLabelY = -Infinity;
 
       for (const seconds of ticksToRender) {
         // Skip ticks outside the valid timeline range (before Big Bang or after Future Horizon)
@@ -452,19 +483,23 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
         const isInFutureZone = seconds > realNowSeconds && seconds < FUTURE_HORIZON_TIME;
         ctx.globalAlpha = isInFutureZone ? 0.6 : 1;
 
+        // Always draw the tick mark (minimum 24px spacing is enforced by tick generation)
         drawTick(ctx, y, timelineX);
 
-        // Draw labels on every tick since spacing is already managed by tick generation
-        const label = formatDateLabel(seconds, unitToDisplay.precision, unitToDisplay.unit, unitToDisplay.quantity);
-        drawTickLabel(ctx, label, timelineX - 5, y);
+        // Only draw label if it's at least 100px from the last label
+        if (Math.abs(y - lastLabelY) >= MIN_LABEL_SPACING) {
+          const label = formatDateLabel(seconds, unitToDisplay.precision, unitToDisplay.unit, unitToDisplay.quantity);
+          drawTickLabel(ctx, label, timelineX - 5, y);
+          lastLabelY = y;
+        }
 
         ctx.globalAlpha = 1; // Reset opacity
       }
     }
 
     // Draw extremity labels (always show them)
-    const visibleTopTime = Math.max(START_TIME, Math.min(FUTURE_HORIZON_TIME, END_TIME - (Math.abs(transform.y) / timelineHeight) * visibleRange));
-    const visibleBottomTime = Math.max(START_TIME, Math.min(FUTURE_HORIZON_TIME, END_TIME - (Math.abs(transform.y) + timelineHeight) / timelineHeight * visibleRange));
+    const visibleTopTime = Math.max(START_TIME, Math.min(FUTURE_HORIZON_TIME, topSeconds));
+    const visibleBottomTime = Math.max(START_TIME, Math.min(FUTURE_HORIZON_TIME, bottomSeconds));
 
     let topLabel = '';
     let bottomLabel = '';
@@ -606,18 +641,26 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
 
+      const currentTransform = transformRef.current;
       const rect = canvas.getBoundingClientRect();
       const mouseY = e.clientY - rect.top;
 
+      // Calculate the timestamp at the mouse position (before zoom)
+      const referenceY = canvas.clientHeight / 3;
+      const pixelOffset = mouseY - referenceY;
+      const timestampAtMouse = currentTransform.y - (pixelOffset * currentTransform.k);
+
       // Reduce zoom sensitivity by 1.5x (from 1.05/0.95 to 1.033/0.967)
       const delta = e.deltaY > 0 ? 1.033 : 0.967;
+      const newK = Math.max(1, Math.min(1e18, currentTransform.k * delta));
 
-      const newK = Math.max(1, Math.min(1e18, transform.k * delta));
-      const timelineHeight = canvas.clientHeight;
-      const oldWorldY = (transform.y - mouseY) / transform.k;
+      // Keep the same timestamp at the mouse position after zoom
+      // Reverse: unixSeconds = transform.y - (pixelOffset * k)
+      // So: transform.y = unixSeconds + (pixelOffset * k)
+      const newReferenceTimestamp = timestampAtMouse + (pixelOffset * newK);
 
       let newTransform: Transform = {
-        y: oldWorldY * newK + mouseY,
+        y: newReferenceTimestamp,
         k: newK
       };
 
@@ -644,7 +687,12 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
           const frameDeltaY = moveEvent.clientY - lastY;
           lastY = moveEvent.clientY;
 
-          let newTransform: Transform = { ...transform, y: transform.y + frameDeltaY };
+          const currentTransform = transformRef.current;
+          // Panning: dragging down pulls timeline down (shows future), dragging up pulls timeline up (shows past)
+          // Positive deltaY (drag down) should increase transform.y (center moves to future)
+          const timestampDelta = frameDeltaY * currentTransform.k;
+
+          let newTransform: Transform = { ...currentTransform, y: currentTransform.y + timestampDelta };
 
           const constrainer = (t: Transform) =>
             constrainTransform(t, { width: canvas.clientWidth, height: canvas.clientHeight }, START_TIME, END_TIME, FUTURE_HORIZON_TIME);
@@ -667,18 +715,15 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
           const timelineX = canvas.clientWidth - eventCircleRadius - 2;
           const isShiftClick = upEvent.shiftKey;
 
-          // Calculate unix_seconds for ANY click on the timeline for debug purposes
-          const margin = 0;
-          const timelineTop = margin;
-          const timelineHeight = canvas.clientHeight - margin * 2;
-          const START_TIME = -435494878264400000;
-          const END_TIME = 435457000000000000;
-          const calculatedUnixSeconds = END_TIME - ((clickY - timelineTop - transform.y) / (timelineHeight * transform.k)) * (END_TIME - START_TIME);
-
           // Check if shift-click on timeline to create new event
           const distFromTimeline = Math.abs(clickX - timelineX);
           if (isShiftClick && onShiftClick && distFromTimeline < 40) {
-            const unixSeconds = END_TIME - ((clickY - timelineTop - transform.y) / (timelineHeight * transform.k)) * (END_TIME - START_TIME);
+            // Convert pixel Y to unix_seconds using reverse of calculateEventY
+            // pixelOffset = -timestampOffset / k, so timestampOffset = -pixelOffset * k
+            const currentTransform = transformRef.current;
+            const referenceY = canvas.clientHeight / 3;
+            const pixelOffset = clickY - referenceY;
+            const unixSeconds = currentTransform.y - (pixelOffset * currentTransform.k);
             onShiftClick(unixSeconds);
             return;
           }
@@ -687,10 +732,11 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
           const eventRadius = 10;
           const displaySize = 100;
 
+          const currentTransform = transformRef.current;
           for (const event of events) {
             const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
             const yScale = (seconds: number): number => {
-              return calculateEventY(seconds, canvas.clientHeight, transform);
+              return calculateEventY(seconds, canvas.clientHeight, currentTransform);
             };
             const eventY = yScale(unixSeconds);
 
@@ -724,17 +770,15 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
 
           if (modalOpen && onCanvasClick && distFromTimeline < 40) {
             // Convert pixel Y coordinate to unix_seconds
-            const margin = 0;
-            const timelineTop = margin;
-            const timelineHeight = canvas.clientHeight - margin * 2;
-            const START_TIME = -435494878264400000;
-            const END_TIME = 435457000000000000;
-
             // Reverse the calculateEventY formula:
-            // eventY = timelineTop + ((END_TIME - unixSeconds) / (END_TIME - START_TIME)) * timelineHeight * k + y
-            // Solving for unixSeconds:
-            // unixSeconds = END_TIME - ((eventY - timelineTop - y) / (timelineHeight * k)) * (END_TIME - START_TIME)
-            const unixSeconds = END_TIME - ((clickY - timelineTop - transform.y) / (timelineHeight * transform.k)) * (END_TIME - START_TIME);
+            // eventY = referenceY + (-timestampOffset / k)
+            // pixelOffset = eventY - referenceY = -timestampOffset / k
+            // timestampOffset = -pixelOffset * k
+            // unixSeconds = transform.y + timestampOffset = transform.y - pixelOffset * k
+            const currentTransform = transformRef.current;
+            const referenceY = canvas.clientHeight / 3;
+            const pixelOffset = clickY - referenceY;
+            const unixSeconds = currentTransform.y - (pixelOffset * currentTransform.k);
             onCanvasClick(unixSeconds);
           }
         }
@@ -751,7 +795,7 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
       canvas.removeEventListener('wheel', handleWheel, { passive: false } as any);
       canvas.removeEventListener('mousedown', handleMouseDown);
     };
-  }, [START_TIME, END_TIME, FUTURE_HORIZON_TIME, modalOpen, onCanvasClick, onShiftClick, events]);
+  }, [START_TIME, END_TIME, FUTURE_HORIZON_TIME, modalOpen, onCanvasClick, onShiftClick, events, updateTransform]);
 
 
   return (

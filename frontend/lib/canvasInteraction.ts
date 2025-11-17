@@ -1,21 +1,12 @@
 /**
  * Canvas interaction handlers (zoom, pan, mouse events)
+ *
+ * New coordinate system:
+ * - y: Unix timestamp at center of screen
+ * - k: Seconds per pixel (zoom factor)
  */
 
 export type Transform = { y: number; k: number };
-
-/**
- * Calculate Y position for a time value
- */
-const calculateY = (
-  timeSeconds: number,
-  START_TIME: number,
-  END_TIME: number,
-  timelineHeight: number,
-  transform: Transform
-): number => {
-  return ((END_TIME - timeSeconds) / (END_TIME - START_TIME)) * timelineHeight * transform.k + transform.y;
-};
 
 /**
  * Constrain transform to keep Big Bang at or below middle of screen
@@ -28,32 +19,22 @@ export const constrainTransform = (
   END_TIME: number,
   FUTURE_HORIZON_TIME: number
 ): Transform => {
-  const timelineHeight = dimensions.height;
-  const midScreen = dimensions.height / 2;
+  // Constraint: Keep center timestamp within reasonable bounds
+  // Allow panning from Big Bang to Future Horizon
+  const constrainedY = Math.max(START_TIME, Math.min(FUTURE_HORIZON_TIME, newTransform.y));
 
-  // Constraint 1: Big Bang should not go higher than middle of screen
-  const bigBangY = calculateY(START_TIME, START_TIME, END_TIME, timelineHeight, newTransform);
-  if (bigBangY < midScreen) {
-    newTransform = {
-      ...newTransform,
-      y: midScreen - calculateY(START_TIME, START_TIME, END_TIME, timelineHeight, { y: 0, k: newTransform.k })
-    };
-  }
+  // Constrain zoom: from 1 second per pixel to 1e18 seconds per pixel (allows viewing entire timeline)
+  const constrainedK = Math.max(1, Math.min(1e18, newTransform.k));
 
-  // Constraint 2: Future Horizon should not go lower than middle of screen
-  const horizonY = calculateY(FUTURE_HORIZON_TIME, START_TIME, END_TIME, timelineHeight, newTransform);
-  if (horizonY > midScreen) {
-    newTransform = {
-      ...newTransform,
-      y: midScreen - calculateY(FUTURE_HORIZON_TIME, START_TIME, END_TIME, timelineHeight, { y: 0, k: newTransform.k })
-    };
-  }
-
-  return newTransform;
+  return {
+    y: constrainedY,
+    k: constrainedK
+  };
 };
 
 /**
  * Create wheel handler for zooming
+ * Zooms around the timestamp at the mouse cursor position
  */
 export const createWheelHandler = (
   transform: Transform,
@@ -68,16 +49,20 @@ export const createWheelHandler = (
     const rect = canvas.getBoundingClientRect();
     const mouseY = e.clientY - rect.top;
 
-    // Reduce zoom sensitivity by 1.5x (from 1.05/0.95 to 1.033/0.967)
-    const delta = e.deltaY > 0 ? 1.033 : 0.967;
-    // Limit max zoom to 1e9 to prevent floating point precision issues in visible events calculation
-    const newK = Math.max(1, Math.min(1e9, transform.k * delta));
+    // Calculate the timestamp at the mouse position
+    const centerY = dimensions.height / 2;
+    const pixelOffset = mouseY - centerY;
+    const timestampAtMouse = transform.y + (pixelOffset * transform.k);
 
-    const timelineHeight = dimensions.height;
-    const oldWorldY = (transform.y - mouseY) / transform.k;
+    // Zoom factor: scroll down = zoom out (increase k), scroll up = zoom in (decrease k)
+    const delta = e.deltaY > 0 ? 1.033 : 0.967;
+    const newK = transform.k * delta;
+
+    // Keep the same timestamp at the mouse position after zoom
+    const newCenterTimestamp = timestampAtMouse - (pixelOffset * newK);
 
     let newTransform: Transform = {
-      y: oldWorldY * newK + mouseY,
+      y: newCenterTimestamp,
       k: newK
     };
 
@@ -88,6 +73,7 @@ export const createWheelHandler = (
 
 /**
  * Create mouse down handler for panning
+ * Panning changes the center timestamp
  */
 export const createMouseDownHandler = (
   transform: Transform,
@@ -100,7 +86,13 @@ export const createMouseDownHandler = (
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaY = moveEvent.clientY - startY;
-      let newTransform: Transform = { ...transform, y: startTransformY + deltaY };
+      // Convert pixel movement to timestamp change
+      const timestampDelta = -deltaY * transform.k; // Negative because dragging down should show earlier times
+
+      let newTransform: Transform = {
+        ...transform,
+        y: startTransformY + timestampDelta
+      };
 
       newTransform = constrainer(newTransform);
       setTransform(newTransform);

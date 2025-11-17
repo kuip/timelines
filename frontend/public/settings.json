@@ -1,8 +1,8 @@
 {
   "api_url": "http://192.168.1.91:8080",
   "default_transform": {
-    "y": 0,
-    "k": 10000000
+    "y": 1732147200,
+    "k": 7884000
   },
   "ui": {
     "timelineCanvasWidthPx": 200,

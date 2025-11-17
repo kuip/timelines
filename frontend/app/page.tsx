@@ -116,42 +116,29 @@ export default function Home() {
 
       setTransform({ y: clampedY, k: clampedK });
     } else {
-      // Load default transform from config and calculate y to show NOW at center
+      // Load default transform from config - y is now timestamp, k is seconds per pixel
       const loadDefaultTransform = async () => {
         try {
           const response = await fetch(`/settings.json?t=${Date.now()}`);
           if (response.ok) {
             const config = await response.json();
             if (config.default_transform) {
-              const { k: defaultK } = config.default_transform;
+              const { y: defaultY, k: defaultK } = config.default_transform;
 
-              // Calculate y to place NOW at center of current viewport
-              const START_TIME = -435494878264400000;
-              const END_TIME = 435457000000000000;
-              const nowTime = Math.floor(Date.now() / 1000);
-              const centerScreenY = viewportHeight / 2;
-              const ratio = (END_TIME - nowTime) / (END_TIME - START_TIME);
-              const calculatedY = centerScreenY - (ratio * viewportHeight * defaultK);
-
+              // Use the configured values directly - y is the center timestamp
               const newParams = new URLSearchParams();
-              newParams.set('y', calculatedY.toString());
+              newParams.set('y', defaultY.toString());
               newParams.set('k', defaultK.toString());
               window.location.replace(`?${newParams.toString()}`);
             }
           }
         } catch (err) {
           console.error('Failed to load default transform from config:', err);
-          // Fallback to NOW at center with zoom 1
-          const START_TIME = -435494878264400000;
-          const END_TIME = 435457000000000000;
+          // Fallback to NOW at center with 3 months per pixel
           const nowTime = Math.floor(Date.now() / 1000);
-          const centerScreenY = viewportHeight / 2;
-          const ratio = (END_TIME - nowTime) / (END_TIME - START_TIME);
-          const calculatedY = centerScreenY - (ratio * viewportHeight * 1);
-
           const newParams = new URLSearchParams();
-          newParams.set('y', calculatedY.toString());
-          newParams.set('k', '1');
+          newParams.set('y', nowTime.toString());
+          newParams.set('k', '7884000'); // 3 months per pixel
           window.location.replace(`?${newParams.toString()}`);
         }
       };
@@ -260,15 +247,16 @@ export default function Home() {
       const timelineTop = margin;
       const centerViewportY = timelineTop + timelineHeight / 2;
 
-      const START_TIME = -435494878264400000;
-      const END_TIME = 435457000000000000;
-
       let closestEvent: EventResponse | null = null;
       let closestDistance = Infinity;
 
       visibleEvents.forEach((event) => {
         const unixSeconds = typeof event.unix_seconds === 'number' ? event.unix_seconds : parseInt(event.unix_seconds as any);
-        const eventY = timelineTop + ((END_TIME - unixSeconds) / (END_TIME - START_TIME)) * timelineHeight * transform.k + transform.y;
+        // Use the same coordinate system as calculateEventY in coordinateHelper.ts
+        const referenceY = timelineHeight / 3;
+        const timestampOffset = unixSeconds - transform.y;
+        const pixelOffset = -timestampOffset / transform.k; // Negative because past is down
+        const eventY = referenceY + pixelOffset;
         const distance = Math.abs(eventY - centerViewportY);
 
         if (distance < closestDistance) {
@@ -281,7 +269,7 @@ export default function Home() {
         setSelectedEvent(closestEvent);
       }
     }
-  }, [visibleEvents]);
+  }, [visibleEvents, transform]);
 
   // Define callbacks BEFORE any conditional returns (React hook rule)
   const handleCanvasClick = useCallback((unixSeconds: number) => {
@@ -442,7 +430,7 @@ export default function Home() {
   return (
     <main className="relative h-screen w-screen bg-stone-50 dark:bg-gray-900 text-gray-900 dark:text-white flex" style={{ fontFamily: '"Roboto Condensed", sans-serif' }}>
       {/* Auth Info - Top Right */}
-      <div className="absolute z-50 top-2 right-4">
+      <div className="absolute z-50" style={{ top: '3px', right: '4px' }}>
         <AuthInfo />
       </div>
 
