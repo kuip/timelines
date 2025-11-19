@@ -5,6 +5,7 @@ import { EventResponse } from '@/types';
 import { eventsApi, relationshipsApi, locationsApi, categoriesApi } from '@/lib/api';
 import { getIconForUrl } from '@/lib/socialNetworks';
 import { apiCache } from '@/lib/apiCache';
+import { assetUrl } from '@/lib/basePath';
 
 interface CategoryChild {
   id: string;
@@ -435,7 +436,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
             {!isEditing && currentEvent.image_url && (
               <div className="w-full bg-gray-200 dark:bg-gray-900">
                 <img
-                  src={currentEvent.image_url}
+                  src={assetUrl(currentEvent.image_url)}
                   alt={currentEvent.title}
                   className="w-full object-contain"
                 />
@@ -637,7 +638,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                       />
                       {formData.image_url && (
                         <img
-                          src={formData.image_url}
+                          src={assetUrl(formData.image_url)}
                           alt="Preview"
                           className="w-12 h-12 rounded border border-gray-300 dark:border-gray-600 object-contain bg-gray-200 dark:bg-gray-900 flex-shrink-0"
                           onError={(e) => {

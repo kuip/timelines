@@ -6,6 +6,7 @@ import { useTheme } from '@/lib/ThemeProvider';
 import { SOCIAL_NETWORKS } from '@/lib/socialNetworks';
 import { locationsApi } from '@/lib/api';
 import { apiCache } from '@/lib/apiCache';
+import { assetUrl } from '@/lib/basePath';
 
 interface EventLocation {
   id: string;
@@ -440,7 +441,10 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
 
             // Create inverted teardrop icon with category color and optional image
             const createTearDropIcon = (color: string, imageUrl?: string) => {
-              const svgString = imageUrl
+              // Apply basePath to image URL for GitHub Pages deployment
+              const imageUrlWithBasePath = imageUrl ? assetUrl(imageUrl) : undefined;
+
+              const svgString = imageUrlWithBasePath
                 ? `
                   <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="25" height="41" viewBox="0 0 25 41">
                     <defs>
@@ -451,7 +455,7 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
                     <!-- Exact Leaflet inverted marker path with category color -->
                     <path d="M12.5,41C12.5,41 0,29 0,22 A 12.5 12.5 0 0 1 12.5 9 A 12.5 12.5 0 0 1 25 22 C 25 29 12.5 41 12.5 41 Z" fill="${color}" stroke="white" stroke-width="1.5"/>
                     <!-- Image in the circle -->
-                    <image xlink:href="${imageUrl}" x="0.5" y="9.5" width="24" height="24" clip-path="url(#circle-clip)" preserveAspectRatio="xMidYMid slice"/>
+                    <image xlink:href="${imageUrlWithBasePath}" x="0.5" y="9.5" width="24" height="24" clip-path="url(#circle-clip)" preserveAspectRatio="xMidYMid slice"/>
                   </svg>
                 `
                 : `
