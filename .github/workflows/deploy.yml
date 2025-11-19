@@ -36,27 +36,13 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
-      - name: Check for custom domain
-        id: check_cname
-        working-directory: ./frontend/public
-        run: |
-          if [ -f CNAME ]; then
-            echo "has_cname=true" >> $GITHUB_OUTPUT
-            echo "Custom domain detected: $(cat CNAME)"
-          else
-            echo "has_cname=false" >> $GITHUB_OUTPUT
-            echo "No custom domain"
-          fi
-
       - name: Build Next.js static export
         working-directory: ./frontend
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-          # Set base path for GitHub Pages
-          # Empty for custom domains or user/org sites
-          # /repo-name for project sites without custom domain
-          NEXT_PUBLIC_BASE_PATH: ${{ steps.check_cname.outputs.has_cname == 'true' && '' || (github.event.repository.name != format('{0}.github.io', github.repository_owner) && format('/{0}', github.event.repository.name) || '') }}
+          # Empty basePath for custom domain (timelines.provable.dev)
+          NEXT_PUBLIC_BASE_PATH: ''
         run: npm run build
 
       - name: Upload artifact
