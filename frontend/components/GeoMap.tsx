@@ -89,6 +89,15 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
               continue;
             }
 
+            // Find the event object to check location_count
+            const event = events.find(e => e.id === eventId);
+
+            // Skip if event has no location data
+            if (event && event.location_count === 0) {
+              fetchedEventIdsRef.current.add(eventId);
+              continue;
+            }
+
             const response = await fetch(`${apiUrl}/api/events/${eventId}/locations`);
             if (!response.ok) continue;
 

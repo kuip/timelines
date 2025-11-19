@@ -59,6 +59,12 @@ export default function RelationshipsPanel({
       return;
     }
 
+    // Skip fetching if event has no relationships (count is 0)
+    if (selectedEvent.relationship_count === 0) {
+      setRelationships([]);
+      return;
+    }
+
     // If we've already fetched relationships for this event, don't fetch again
     if (fetchedEventIdsRef.current.has(selectedEvent.id)) {
       return;

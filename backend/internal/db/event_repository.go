@@ -33,8 +33,8 @@ func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) 
 			title, description, category, created_by_user_id, image_url
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
-		          title, description, category, importance_score, related_event_id,
-		          created_at, updated_at, created_by_user_id, image_url
+		          title, description, category, importance_score, related_event_id, relationship_count,
+		          location_count, created_at, updated_at, created_by_user_id, image_url
 	`
 
 	event := &models.Event{}
@@ -62,6 +62,8 @@ func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) 
 		&event.Category,
 		&event.ImportanceScore,
 		&event.RelatedEventID,
+		&event.RelationshipCount,
+		&event.LocationCount,
 		&event.CreatedAt,
 		&event.UpdatedAt,
 		&event.CreatedByUserID,
@@ -79,8 +81,8 @@ func (r *EventRepository) Create(req models.CreateEventRequest, userID *string) 
 func (r *EventRepository) GetByID(id string) (*models.Event, error) {
 	query := `
 		SELECT id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
-		       title, description, category, importance_score, related_event_id,
-		       created_at, updated_at, created_by_user_id, image_url
+		       title, description, category, importance_score, related_event_id, relationship_count,
+		       location_count, created_at, updated_at, created_by_user_id, image_url
 		FROM events
 		WHERE id = $1
 	`
@@ -98,6 +100,8 @@ func (r *EventRepository) GetByID(id string) (*models.Event, error) {
 		&event.Category,
 		&event.ImportanceScore,
 		&event.RelatedEventID,
+		&event.RelationshipCount,
+		&event.LocationCount,
 		&event.CreatedAt,
 		&event.UpdatedAt,
 		&event.CreatedByUserID,
@@ -119,8 +123,8 @@ func (r *EventRepository) List(params models.EventQueryParams) ([]models.Event, 
 	// Build query
 	query := `
 		SELECT id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
-		       title, description, category, importance_score, related_event_id,
-		       created_at, updated_at, created_by_user_id, image_url
+		       title, description, category, importance_score, related_event_id, relationship_count,
+		       location_count, created_at, updated_at, created_by_user_id, image_url
 		FROM public.events
 		WHERE 1=1
 	`
@@ -201,6 +205,8 @@ func (r *EventRepository) List(params models.EventQueryParams) ([]models.Event, 
 			&event.Category,
 			&event.ImportanceScore,
 			&event.RelatedEventID,
+			&event.RelationshipCount,
+			&event.LocationCount,
 			&event.CreatedAt,
 			&event.UpdatedAt,
 			&event.CreatedByUserID,
@@ -282,8 +288,8 @@ func (r *EventRepository) Update(id string, req models.UpdateEventRequest) (*mod
 		SET %s
 		WHERE id = $%d
 		RETURNING id, timeline_seconds, unix_seconds, unix_nanos, precision_level, uncertainty_range,
-		          title, description, category, importance_score, related_event_id,
-		          created_at, updated_at, created_by_user_id, image_url
+		          title, description, category, importance_score, related_event_id, relationship_count,
+		          location_count, created_at, updated_at, created_by_user_id, image_url
 	`, strings.Join(updates, ", "), argCount)
 
 	event := &models.Event{}
@@ -299,6 +305,8 @@ func (r *EventRepository) Update(id string, req models.UpdateEventRequest) (*mod
 		&event.Category,
 		&event.ImportanceScore,
 		&event.RelatedEventID,
+		&event.RelationshipCount,
+		&event.LocationCount,
 		&event.CreatedAt,
 		&event.UpdatedAt,
 		&event.CreatedByUserID,
@@ -430,4 +438,117 @@ func (r *EventRepository) GetSourcesByEventID(eventID string) ([]*models.EventSo
 	}
 
 	return sources, nil
+}
+
+// GetSourcesByEventIDs retrieves sources for multiple events in a single query (batch optimization)
+func (r *EventRepository) GetSourcesByEventIDs(eventIDs []string) (map[string][]*models.EventSource, error) {
+	if len(eventIDs) == 0 {
+		return make(map[string][]*models.EventSource), nil
+	}
+
+	// Build placeholders for IN clause
+	placeholders := make([]string, len(eventIDs))
+	args := make([]interface{}, len(eventIDs))
+	for i, id := range eventIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id, event_id, source_type, title, url, citation, credibility_score, added_by_user_id, created_at
+		FROM event_sources
+		WHERE event_id IN (%s)
+		ORDER BY event_id, created_at DESC
+	`, strings.Join(placeholders, ", "))
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get event sources: %w", err)
+	}
+	defer rows.Close()
+
+	// Group sources by event_id
+	sourcesMap := make(map[string][]*models.EventSource)
+	for rows.Next() {
+		source := &models.EventSource{}
+		err := rows.Scan(
+			&source.ID,
+			&source.EventID,
+			&source.SourceType,
+			&source.Title,
+			&source.URL,
+			&source.Citation,
+			&source.CredibilityScore,
+			&source.AddedByUserID,
+			&source.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan event source: %w", err)
+		}
+		sourcesMap[source.EventID] = append(sourcesMap[source.EventID], source)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating event sources: %w", err)
+	}
+
+	return sourcesMap, nil
+}
+
+// GetRelationshipsByEventIDs retrieves relationships for multiple events in a single query (batch optimization)
+func (r *EventRepository) GetRelationshipsByEventIDs(eventIDs []string) (map[string][]*models.EventRelationship, error) {
+	if len(eventIDs) == 0 {
+		return make(map[string][]*models.EventRelationship), nil
+	}
+
+	// Build placeholders for IN clause
+	placeholders := make([]string, len(eventIDs))
+	args := make([]interface{}, len(eventIDs))
+	for i, id := range eventIDs {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(`
+		SELECT id, event_id_a, event_id_b, relationship_type, weight, relationship_description
+		FROM event_relationships
+		WHERE event_id_a IN (%s) OR event_id_b IN (%s)
+		ORDER BY weight DESC
+	`, strings.Join(placeholders, ", "), strings.Join(placeholders, ", "))
+
+	// Duplicate args for the second IN clause
+	args = append(args, args...)
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get event relationships: %w", err)
+	}
+	defer rows.Close()
+
+	// Group relationships by event_id
+	relationshipsMap := make(map[string][]*models.EventRelationship)
+	for rows.Next() {
+		rel := &models.EventRelationship{}
+		err := rows.Scan(
+			&rel.ID,
+			&rel.EventIDA,
+			&rel.EventIDB,
+			&rel.RelationshipType,
+			&rel.Weight,
+			&rel.Description,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan event relationship: %w", err)
+		}
+
+		// Add to both event IDs' lists
+		relationshipsMap[rel.EventIDA] = append(relationshipsMap[rel.EventIDA], rel)
+		relationshipsMap[rel.EventIDB] = append(relationshipsMap[rel.EventIDB], rel)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating event relationships: %w", err)
+	}
+
+	return relationshipsMap, nil
 }

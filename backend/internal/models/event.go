@@ -26,7 +26,9 @@ type Event struct {
 	ImportanceScore int `json:"importance_score" db:"importance_score"`
 
 	// Relationships
-	RelatedEventID *string `json:"related_event_id,omitempty" db:"related_event_id"`
+	RelatedEventID     *string `json:"related_event_id,omitempty" db:"related_event_id"`
+	RelationshipCount  int     `json:"relationship_count" db:"relationship_count"`
+	LocationCount      int     `json:"location_count" db:"location_count"`
 
 	// Metadata
 	CreatedAt     time.Time  `json:"created_at" db:"created_at"`
@@ -86,6 +88,17 @@ type EventResponse struct {
 	SourceCount   int `json:"source_count"`
 	DiscussionCount int `json:"discussion_count"`
 	Sources       []*EventSource `json:"sources,omitempty"`
+	Relationships []*EventRelationship `json:"relationships,omitempty"`
+}
+
+// EventRelationship represents a relationship between two events
+type EventRelationship struct {
+	ID              string  `json:"id" db:"id"`
+	EventIDA        string  `json:"event_id_a" db:"event_id_a"`
+	EventIDB        string  `json:"event_id_b" db:"event_id_b"`
+	RelationshipType string `json:"relationship_type" db:"relationship_type"`
+	Weight          int     `json:"weight" db:"weight"`
+	Description     *string `json:"description,omitempty" db:"relationship_description"`
 }
 
 // VoteStats represents aggregated vote statistics

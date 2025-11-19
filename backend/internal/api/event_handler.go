@@ -85,6 +85,18 @@ func (h *EventHandler) GetEvent(c *gin.Context) {
 		sources = []*models.EventSource{}
 	}
 
+	// Fetch relationships for this event
+	relationshipsMap, err := h.repo.GetRelationshipsByEventIDs([]string{id})
+	relationships := []*models.EventRelationship{}
+	if err != nil {
+		log.Printf("Warning: failed to fetch relationships for event %s: %v", id, err)
+	} else {
+		relationships = relationshipsMap[id]
+		if relationships == nil {
+			relationships = []*models.EventRelationship{}
+		}
+	}
+
 	// Convert to response with formatted time
 	response := models.EventResponse{
 		Event:         *event,
@@ -92,6 +104,7 @@ func (h *EventHandler) GetEvent(c *gin.Context) {
 		SourceCount:   len(sources),
 		DiscussionCount: 0,
 		Sources:       sources,
+		Relationships: relationships,
 	}
 
 	c.JSON(http.StatusOK, response)
@@ -116,14 +129,36 @@ func (h *EventHandler) ListEvents(c *gin.Context) {
 		return
 	}
 
+	// Fetch sources for all events in a single query (batch optimization)
+	eventIDs := make([]string, len(events))
+	for i, event := range events {
+		eventIDs[i] = event.ID
+	}
+
+	sourcesMap, err := h.repo.GetSourcesByEventIDs(eventIDs)
+	if err != nil {
+		log.Printf("Warning: failed to batch fetch sources: %v", err)
+		sourcesMap = make(map[string][]*models.EventSource)
+	}
+
+	// Fetch relationships for all events in a single query (batch optimization)
+	relationshipsMap, err := h.repo.GetRelationshipsByEventIDs(eventIDs)
+	if err != nil {
+		log.Printf("Warning: failed to batch fetch relationships: %v", err)
+		relationshipsMap = make(map[string][]*models.EventRelationship)
+	}
+
 	// Convert to response format
 	responses := make([]models.EventResponse, len(events))
 	for i, event := range events {
-		// Fetch sources for this event
-		sources, err := h.repo.GetSourcesByEventID(event.ID)
-		if err != nil {
-			log.Printf("Warning: failed to fetch sources for event %s: %v", event.ID, err)
+		sources := sourcesMap[event.ID]
+		if sources == nil {
 			sources = []*models.EventSource{}
+		}
+
+		relationships := relationshipsMap[event.ID]
+		if relationships == nil {
+			relationships = []*models.EventRelationship{}
 		}
 
 		responses[i] = models.EventResponse{
@@ -132,6 +167,7 @@ func (h *EventHandler) ListEvents(c *gin.Context) {
 			SourceCount:     len(sources),
 			DiscussionCount: 0,
 			Sources:         sources,
+			Relationships:   relationships,
 		}
 	}
 

@@ -12,6 +12,7 @@ import { getFutureHorizonTime } from '@/lib/coordinateHelper';
 import { useAuth } from '@/lib/useAuth';
 import AuthInfo from '@/components/AuthInfo';
 import { categoryMatchesFilter } from '@/lib/categoryColors';
+import { getUiConfig, getDefaultTransform, getApiUrl } from '@/lib/settings';
 
 const GeoMap = dynamic(() => import('@/components/GeoMap'), { ssr: false });
 
@@ -60,19 +61,14 @@ export default function Home() {
   const END_TIME = 435457000000000000;
   const FUTURE_HORIZON_TIME = getFutureHorizonTime();
 
-  // Load UI config from settings.json
+  // Load UI config from settings.json (cached)
   useEffect(() => {
     const loadConfig = async () => {
       try {
-        const response = await fetch(`/settings.json?t=${Date.now()}`);
-        if (response.ok) {
-          const config = await response.json();
-          if (config.ui) {
-            setUiConfig(config.ui);
-            // Update canvas dimensions with config value
-            setCanvasDimensions({ width: config.ui.timelineCanvasWidthPx, height: window.innerHeight });
-          }
-        }
+        const config = await getUiConfig();
+        setUiConfig(config);
+        // Update canvas dimensions with config value
+        setCanvasDimensions({ width: config.timelineCanvasWidthPx, height: window.innerHeight });
       } catch (err) {
         console.error('Failed to load UI config:', err);
       }
@@ -87,13 +83,13 @@ export default function Home() {
     setCanvasDimensions({ width: uiConfig.timelineCanvasWidthPx, height: viewportHeight });
 
     const params = new URLSearchParams(window.location.search);
-    const y = parseFloat(params.get('y') || '');
+    const t = parseFloat(params.get('t') || '');
     const k = parseFloat(params.get('k') || '');
 
-    if (!isNaN(y) && !isNaN(k)) {
+    if (!isNaN(t) && !isNaN(k)) {
       // Check if transform is unreasonable (likely corrupted/extreme values)
       // Allow very large k values for viewing extreme past (Big Bang era)
-      const isUnreasonable = k > 1e19 || Math.abs(y) > 5e17;
+      const isUnreasonable = k > 1e19 || Math.abs(t) > 5e17;
 
       if (isUnreasonable) {
         // Reset to default - redirect to clean URL
@@ -101,43 +97,38 @@ export default function Home() {
         return;
       }
 
-      // Clamp zoom and y to reasonable ranges to prevent performance issues
+      // Clamp zoom and t to reasonable ranges to prevent performance issues
       const clampedK = Math.max(1, Math.min(1e18, k));
-      // Clamp y to prevent extreme off-screen positions (allow up to Big Bang timestamp)
-      const clampedY = Math.max(-5e17, Math.min(1e15, y));
+      // Clamp t to prevent extreme off-screen positions (allow up to Big Bang timestamp)
+      const clampedT = Math.max(-5e17, Math.min(1e15, t));
 
       // If values were clamped, update URL to reflect the clamped values
-      if (clampedY !== y || clampedK !== k) {
+      if (clampedT !== t || clampedK !== k) {
         const newParams = new URLSearchParams();
-        newParams.set('y', clampedY.toString());
+        newParams.set('t', clampedT.toString());
         newParams.set('k', clampedK.toString());
         window.history.replaceState({}, '', `?${newParams.toString()}`);
       }
 
-      setTransform({ y: clampedY, k: clampedK });
+      setTransform({ y: clampedT, k: clampedK });
     } else {
-      // Load default transform from config - y is now timestamp, k is seconds per pixel
+      // Load default transform from config (cached) - t is now timestamp, k is seconds per pixel
       const loadDefaultTransform = async () => {
         try {
-          const response = await fetch(`/settings.json?t=${Date.now()}`);
-          if (response.ok) {
-            const config = await response.json();
-            if (config.default_transform) {
-              const { y: defaultY, k: defaultK } = config.default_transform;
+          const config = await getDefaultTransform();
+          const { y: defaultY, k: defaultK } = config;
 
-              // Use the configured values directly - y is the center timestamp
-              const newParams = new URLSearchParams();
-              newParams.set('y', defaultY.toString());
-              newParams.set('k', defaultK.toString());
-              window.location.replace(`?${newParams.toString()}`);
-            }
-          }
+          // Use the configured values directly - t is the center timestamp
+          const newParams = new URLSearchParams();
+          newParams.set('t', defaultY.toString());
+          newParams.set('k', defaultK.toString());
+          window.location.replace(`?${newParams.toString()}`);
         } catch (err) {
           console.error('Failed to load default transform from config:', err);
           // Fallback to NOW at center with 3 months per pixel
           const nowTime = Math.floor(Date.now() / 1000);
           const newParams = new URLSearchParams();
-          newParams.set('y', nowTime.toString());
+          newParams.set('t', nowTime.toString());
           newParams.set('k', '7884000'); // 3 months per pixel
           window.location.replace(`?${newParams.toString()}`);
         }
@@ -147,8 +138,13 @@ export default function Home() {
     }
   }, []);
 
+  const hasLoadedEvents = useRef(false);
+
   useEffect(() => {
-    loadEvents();
+    if (!hasLoadedEvents.current) {
+      hasLoadedEvents.current = true;
+      loadEvents();
+    }
   }, []);
 
   const loadEvents = async () => {
@@ -232,7 +228,7 @@ export default function Home() {
 
     debounceTimerRef.current = setTimeout(() => {
       const params = new URLSearchParams();
-      params.set('y', constrainedTransform.y.toString());
+      params.set('t', constrainedTransform.y.toString());
       params.set('k', constrainedTransform.k.toString());
       window.history.replaceState({}, '', `?${params.toString()}`);
     }, 300); // Update URL after 300ms of inactivity
@@ -334,19 +330,8 @@ export default function Home() {
       // For now, try to fetch the event's location
       const fetchEventLocation = async () => {
         try {
-          // Get API URL from settings first, fallback to environment variable
-          let apiUrl = 'http://localhost:8080';
-          try {
-            const settingsResponse = await fetch('/settings.json?t=' + Date.now());
-            if (settingsResponse.ok) {
-              const settings = await settingsResponse.json();
-              if (settings.api_url) {
-                apiUrl = settings.api_url;
-              }
-            }
-          } catch (e) {
-            // Fall through to default
-          }
+          // Get API URL from cached settings
+          const apiUrl = await getApiUrl();
 
           const response = await fetch(`${apiUrl}/api/events/${selectedEvent.id}/locations?t=${Date.now()}`);
           if (response.ok) {
@@ -487,6 +472,7 @@ export default function Home() {
         ref={modalRef}
         event={selectedEvent}
         events={events}
+        displayedCardEvents={displayedCardEvents}
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onEventUpdate={handleEventUpdate}

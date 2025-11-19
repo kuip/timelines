@@ -25,6 +25,8 @@ export interface Event {
   category?: string;
   importance_score: number;
   related_event_id?: string; // Links to another event with an arc
+  relationship_count: number; // Number of relationships this event has
+  location_count: number; // Number of locations associated with this event
   created_at: string;
   updated_at: string;
   created_by_user_id?: string;

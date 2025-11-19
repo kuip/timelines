@@ -5,6 +5,7 @@ import { EventResponse } from '@/types';
 import { eventsApi } from '@/lib/api';
 import { getIconForUrl } from '@/lib/socialNetworks';
 import { apiCache } from '@/lib/apiCache';
+import { getApiUrl } from '@/lib/settings';
 
 interface CategoryChild {
   id: string;
@@ -52,6 +53,7 @@ if (typeof window !== 'undefined') {
 interface EventDetailModalProps {
   event: EventResponse | null;
   events: EventResponse[];
+  displayedCardEvents?: EventResponse[];
   isOpen: boolean;
   onClose: () => void;
   onEventUpdate?: (updatedEvent: EventResponse) => void;
@@ -82,7 +84,7 @@ export interface EventDetailModalHandle {
 }
 
 const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailModalProps>(
-  ({ event, events, isOpen, onClose, onEventUpdate, onShiftClickImage, onEditingLocationModeChange, canEdit = false }, ref) => {
+  ({ event, events, displayedCardEvents, isOpen, onClose, onEventUpdate, onShiftClickImage, onEditingLocationModeChange, canEdit = false }, ref) => {
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -155,74 +157,66 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
         if (event.id !== 'new') {
           const fetchEventData = async () => {
             try {
-              // Try to get API URL from settings first, fallback to environment variable
-              let apiUrl = 'http://localhost:8080';
-              try {
-                const settingsResponse = await fetch('/settings.json?t=' + Date.now());
-                if (settingsResponse.ok) {
-                  const settings = await settingsResponse.json();
-                  if (settings.api_url) {
-                    apiUrl = settings.api_url;
-                  }
+              // Get API URL from cached settings
+              const apiUrl = await getApiUrl();
+
+              // Fetch relationships with caching - only if event has relationships
+              if (event.relationship_count > 0) {
+                try {
+                  const data = await apiCache.fetch(
+                    `relationships:${event.id}`,
+                    async () => {
+                      const response = await fetch(`${apiUrl}/api/events/${event.id}/relationships`);
+                      if (!response.ok) throw new Error('Failed to fetch relationships');
+                      return response.json();
+                    },
+                    30 * 60 * 1000 // 30 minutes - relationships rarely change
+                  );
+                  // Deduplicate related event IDs using a Set
+                  const relatedIdsSet = new Set(
+                    data.relationships?.map((rel: any) => {
+                      // Get the other event ID from the relationship
+                      return rel.event_id_a === event.id ? rel.event_id_b : rel.event_id_a;
+                    }) || []
+                  );
+                  const relatedIds = Array.from(relatedIdsSet) as string[];
+                  setFormData((prev) => ({
+                    ...prev,
+                    related_event_ids: relatedIds,
+                  }));
+                } catch (err) {
+                  console.warn('Failed to fetch relationships:', err);
                 }
-              } catch (e) {
-                // Fall through to default
               }
 
-              apiUrl = apiUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-
-              // Fetch relationships with caching
-              try {
-                const data = await apiCache.fetch(
-                  `relationships:${event.id}`,
-                  async () => {
-                    const response = await fetch(`${apiUrl}/api/events/${event.id}/relationships`);
-                    if (!response.ok) throw new Error('Failed to fetch relationships');
-                    return response.json();
-                  },
-                  5 * 60 * 1000 // 5 minutes
-                );
-                // Deduplicate related event IDs using a Set
-                const relatedIdsSet = new Set(
-                  data.relationships?.map((rel: any) => {
-                    // Get the other event ID from the relationship
-                    return rel.event_id_a === event.id ? rel.event_id_b : rel.event_id_a;
-                  }) || []
-                );
-                const relatedIds = Array.from(relatedIdsSet) as string[];
-                setFormData((prev) => ({
-                  ...prev,
-                  related_event_ids: relatedIds,
-                }));
-              } catch (err) {
-                console.warn('Failed to fetch relationships:', err);
-              }
-
-              // Fetch locations with caching
-              try {
-                const locData = await apiCache.fetch(
-                  `locations:${event.id}`,
-                  async () => {
-                    const response = await fetch(`${apiUrl}/api/events/${event.id}/locations`);
-                    if (!response.ok) throw new Error('Failed to fetch locations');
-                    return response.json();
-                  },
-                  2 * 60 * 1000 // 2 minutes (shorter TTL for locations as they change more often)
-                );
-                if (locData.locations && locData.locations.length > 0) {
-                  const primaryLocation = locData.locations.find((loc: any) => loc.is_primary) || locData.locations[0];
-                  if (primaryLocation && primaryLocation.geojson?.type === 'Point') {
-                    const [lng, lat] = primaryLocation.geojson.coordinates;
-                    setFormData((prev) => ({
-                      ...prev,
-                      location_latitude: lat,
-                      location_longitude: lng,
-                      location_name: primaryLocation.location_name || '',
-                    }));
+              // Fetch locations with caching - only if event has locations and has a displayed card
+              const isDisplayed = displayedCardEvents?.some(e => e.id === event.id) ?? true;
+              if (isDisplayed && event.location_count > 0) {
+                try {
+                  const locData = await apiCache.fetch(
+                    `locations:${event.id}`,
+                    async () => {
+                      const response = await fetch(`${apiUrl}/api/events/${event.id}/locations`);
+                      if (!response.ok) throw new Error('Failed to fetch locations');
+                      return response.json();
+                    },
+                    30 * 60 * 1000 // 30 minutes - locations rarely change
+                  );
+                  if (locData.locations && locData.locations.length > 0) {
+                    const primaryLocation = locData.locations.find((loc: any) => loc.is_primary) || locData.locations[0];
+                    if (primaryLocation && primaryLocation.geojson?.type === 'Point') {
+                      const [lng, lat] = primaryLocation.geojson.coordinates;
+                      setFormData((prev) => ({
+                        ...prev,
+                        location_latitude: lat,
+                        location_longitude: lng,
+                        location_name: primaryLocation.location_name || '',
+                      }));
+                    }
                   }
+                } catch (err) {
+                  console.warn('Failed to fetch locations:', err);
                 }
-              } catch (err) {
-                console.warn('Failed to fetch locations:', err);
               }
             } catch (err) {
               console.warn('Failed to fetch event data:', err);

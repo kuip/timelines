@@ -232,6 +232,15 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
               continue;
             }
 
+            // Find the event object to check relationship_count
+            const event = visibleEventsForRelationships.find(e => e.id === eventId);
+
+            // Skip if event has no relationships
+            if (event && event.relationship_count === 0) {
+              fetchedEventIdsRef.current.add(eventId);
+              continue;
+            }
+
             // Use cache for relationship fetching (5 minute TTL)
             const data = await apiCache.fetch(
               `relationships:${eventId}`,
