@@ -2,10 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { EventResponse } from '@/types';
-import { eventsApi } from '@/lib/api';
+import { eventsApi, relationshipsApi, locationsApi, categoriesApi } from '@/lib/api';
 import { getIconForUrl } from '@/lib/socialNetworks';
 import { apiCache } from '@/lib/apiCache';
-import { getApiUrl } from '@/lib/settings';
 
 interface CategoryChild {
   id: string;
@@ -31,18 +30,15 @@ let CATEGORY_MAP: Record<string, CategoryChild> = {};
 if (typeof window !== 'undefined') {
   (async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/categories/tree');
-      if (response.ok) {
-        const data = await response.json();
-        if (data.categories && Array.isArray(data.categories)) {
-          CATEGORY_TREE = data.categories;
-          // Build flat map for quick lookups
-          data.categories.forEach((group: CategoryGroup) => {
-            group.children.forEach((child: CategoryChild) => {
-              CATEGORY_MAP[child.id] = child;
-            });
+      const data = await categoriesApi.getCategoriesTree();
+      if (data.categories && Array.isArray(data.categories)) {
+        CATEGORY_TREE = data.categories;
+        // Build flat map for quick lookups
+        data.categories.forEach((group: CategoryGroup) => {
+          group.children.forEach((child: CategoryChild) => {
+            CATEGORY_MAP[child.id] = child;
           });
-        }
+        });
       }
     } catch (err) {
       console.warn('Failed to load categories tree from API:', err);
@@ -157,19 +153,12 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
         if (event.id !== 'new') {
           const fetchEventData = async () => {
             try {
-              // Get API URL from cached settings
-              const apiUrl = await getApiUrl();
-
               // Fetch relationships with caching - only if event has relationships
               if (event.relationship_count > 0) {
                 try {
                   const data = await apiCache.fetch(
                     `relationships:${event.id}`,
-                    async () => {
-                      const response = await fetch(`${apiUrl}/api/events/${event.id}/relationships`);
-                      if (!response.ok) throw new Error('Failed to fetch relationships');
-                      return response.json();
-                    },
+                    async () => relationshipsApi.getRelationships(event.id),
                     30 * 60 * 1000 // 30 minutes - relationships rarely change
                   );
                   // Deduplicate related event IDs using a Set
@@ -195,11 +184,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                 try {
                   const locData = await apiCache.fetch(
                     `locations:${event.id}`,
-                    async () => {
-                      const response = await fetch(`${apiUrl}/api/events/${event.id}/locations`);
-                      if (!response.ok) throw new Error('Failed to fetch locations');
-                      return response.json();
-                    },
+                    async () => locationsApi.getLocations(event.id),
                     30 * 60 * 1000 // 30 minutes - locations rarely change
                   );
                   if (locData.locations && locData.locations.length > 0) {
@@ -298,45 +283,14 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
         // If location coordinates were edited, save them
         if (formData.location_latitude && formData.location_longitude) {
           try {
-            // Get API URL from settings first
-            let apiUrl = 'http://localhost:8080';
-            try {
-              const settingsResponse = await fetch('/settings.json?t=' + Date.now());
-              if (settingsResponse.ok) {
-                const settings = await settingsResponse.json();
-                if (settings.api_url) {
-                  apiUrl = settings.api_url;
-                }
-              }
-            } catch (e) {
-              // Fall through to default
-            }
-
-            const locationResponse = await fetch(`${apiUrl}/api/events/${savedEvent.id}/locations/primary`, {
-              method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                latitude: formData.location_latitude,
-                longitude: formData.location_longitude,
-                location_name: formData.location_name || '',
-              }),
+            await locationsApi.updatePrimaryLocation(savedEvent.id, {
+              latitude: formData.location_latitude,
+              longitude: formData.location_longitude,
+              location_name: formData.location_name || '',
             });
 
-            if (!locationResponse.ok) {
-              console.warn('Failed to save location, but event was saved');
-            } else {
-              // Fetch the updated location data to refresh the cache
-              try {
-                const updatedLocResponse = await fetch(`${apiUrl}/api/events/${savedEvent.id}/locations`);
-                if (updatedLocResponse.ok) {
-                  await updatedLocResponse.json();
-                }
-              } catch (err) {
-                console.warn('Failed to refresh location cache:', err);
-              }
-            }
+            // Invalidate location cache
+            apiCache.invalidate(`locations:${savedEvent.id}`);
           } catch (locError) {
             console.warn('Failed to save location:', locError);
             // Don't fail the entire save, location is secondary
@@ -773,6 +727,7 @@ const EventDetailModal = React.forwardRef<EventDetailModalHandle, EventDetailMod
                   <div>
                     <h3 className="text-sm font-semibold text-gray-600 dark:text-gray-400">Time</h3>
                     <p className="text-blue-600 dark:text-blue-400 font-mono">{currentEvent.formatted_time}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Precision: {currentEvent.precision_level}</p>
                   </div>
 
                   {/* Category */}

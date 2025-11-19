@@ -147,14 +147,47 @@ export default function Home() {
     }
   }, []);
 
+  // Check for event ID in URL on mount and when events are loaded
+  useEffect(() => {
+    if (events.length === 0) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const eventId = params.get('event');
+
+    if (eventId) {
+      const event = events.find(e => e.id === eventId);
+      if (event) {
+        setSelectedEvent(event);
+        setModalOpen(true);
+      }
+    }
+  }, [events]);
+
   const loadEvents = async () => {
     try {
       setLoading(true);
-      const { events: data } = await eventsApi.getEvents({
-        limit: 10000, // Temporary: fetch all current events (will implement dynamic loading later)
-        min_importance: 0,
-      });
-      setEvents(data);
+
+      // Fetch all events using pagination (Supabase has a max limit per request)
+      const allEvents: EventResponse[] = [];
+      const pageSize = 1000; // Supabase default max
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+        const { events: data, count } = await eventsApi.getEvents({
+          limit: pageSize,
+          offset: offset,
+          min_importance: 0,
+        });
+
+        allEvents.push(...data);
+        offset += pageSize;
+
+        // Check if there are more events to fetch
+        hasMore = data.length === pageSize && (count === null || allEvents.length < count);
+      }
+
+      setEvents(allEvents);
       setError(null);
     } catch (err) {
       console.error('Failed to load events:', err);
@@ -167,6 +200,20 @@ export default function Home() {
   const handleEventClick = (event: EventResponse) => {
     setSelectedEvent(event);
     setModalOpen(true);
+
+    // Add event ID to URL
+    const params = new URLSearchParams(window.location.search);
+    params.set('event', event.id);
+    window.history.pushState({}, '', `?${params.toString()}`);
+  };
+
+  const handleModalClose = () => {
+    setModalOpen(false);
+
+    // Remove event ID from URL
+    const params = new URLSearchParams(window.location.search);
+    params.delete('event');
+    window.history.pushState({}, '', `?${params.toString()}`);
   };
 
   const handleEventUpdate = (updatedEvent: EventResponse) => {
@@ -197,6 +244,8 @@ export default function Home() {
       description: '',
       category: 'contemporary',
       importance_score: 5,
+      relationship_count: 0,
+      location_count: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       formatted_time: new Date(unixSeconds * 1000).toISOString(),
@@ -474,7 +523,7 @@ export default function Home() {
         events={events}
         displayedCardEvents={displayedCardEvents}
         isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={handleModalClose}
         onEventUpdate={handleEventUpdate}
         onShiftClickImage={handleShiftClickImage}
         onEditingLocationModeChange={setEditingLocationMode}

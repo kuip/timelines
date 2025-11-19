@@ -44,7 +44,8 @@ class ApiCache {
    * Invalidate all cache entries matching a pattern
    */
   invalidatePattern(pattern: RegExp): void {
-    for (const key of this.cache.keys()) {
+    const keys = Array.from(this.cache.keys());
+    for (const key of keys) {
       if (pattern.test(key)) {
         this.cache.delete(key);
       }

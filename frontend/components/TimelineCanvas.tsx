@@ -32,6 +32,7 @@ import {
   type Transform,
 } from '@/lib/canvasInteraction';
 import { apiCache } from '@/lib/apiCache';
+import { relationshipsApi } from '@/lib/api';
 
 interface TimelineCanvasProps {
   events: EventResponse[];
@@ -189,8 +190,6 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
   useEffect(() => {
     const fetchRelationshipsForVisibleEvents = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-
         // Only fetch relationships if we have events
         if (memoizedVisibleEventIdsStr.length === 0) {
           setRelationships([]);
@@ -241,15 +240,11 @@ const TimelineCanvas: React.FC<TimelineCanvasProps> = ({
               continue;
             }
 
-            // Use cache for relationship fetching (5 minute TTL)
+            // Use cache for relationship fetching (30 minute TTL)
             const data = await apiCache.fetch(
               `relationships:${eventId}`,
-              async () => {
-                const response = await fetch(`${apiUrl}/api/events/${eventId}/relationships`);
-                if (!response.ok) throw new Error('Failed to fetch');
-                return response.json();
-              },
-              5 * 60 * 1000 // 5 minutes
+              async () => relationshipsApi.getRelationships(eventId),
+              30 * 60 * 1000 // 30 minutes - relationships rarely change
             ).catch(() => ({ relationships: [] }));
             if (data.relationships && Array.isArray(data.relationships)) {
               for (const rel of data.relationships) {

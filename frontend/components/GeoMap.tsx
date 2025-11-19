@@ -4,6 +4,8 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { EventResponse } from '@/types';
 import { useTheme } from '@/lib/ThemeProvider';
 import { SOCIAL_NETWORKS } from '@/lib/socialNetworks';
+import { locationsApi } from '@/lib/api';
+import { apiCache } from '@/lib/apiCache';
 
 interface EventLocation {
   id: string;
@@ -70,8 +72,6 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
           return;
         }
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-
         // Parse event IDs from the memoized string
         const eventIds = memoizedEventIdsStr.split(',');
 
@@ -98,10 +98,12 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
               continue;
             }
 
-            const response = await fetch(`${apiUrl}/api/events/${eventId}/locations`);
-            if (!response.ok) continue;
-
-            const data = await response.json();
+            // Use cache for location fetching (30 minute TTL)
+            const data = await apiCache.fetch(
+              `locations:${eventId}`,
+              async () => locationsApi.getLocations(eventId),
+              30 * 60 * 1000 // 30 minutes - locations rarely change
+            ).catch(() => ({ locations: [] }));
             if (data.locations && Array.isArray(data.locations)) {
               for (const item of data.locations) {
                 // The API returns a flat object with geojson as geometry, not a GeoJSON Feature
@@ -644,8 +646,9 @@ export default function GeoMap({ events, selectedEvent, onEventClick, onMapClick
         event.sources.forEach(source => {
           if (source.url) {
             // Check which domain this source belongs to
+            const sourceUrl = source.url; // Store in variable for TypeScript
             SOCIAL_NETWORKS.forEach(network => {
-              if (source.url.toLowerCase().includes(network.domain.toLowerCase().replace('https://', '').replace('http://', ''))) {
+              if (sourceUrl.toLowerCase().includes(network.domain.toLowerCase().replace('https://', '').replace('http://', ''))) {
                 counts.set(network.domain, (counts.get(network.domain) || 0) + 1);
               }
             });
