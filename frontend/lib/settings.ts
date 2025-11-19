@@ -1,3 +1,5 @@
+import { assetUrl } from './basePath';
+
 // Centralized settings loader with caching
 let settingsCache: any = null;
 let settingsPromise: Promise<any> | null = null;
@@ -16,7 +18,7 @@ export async function loadSettings() {
   // Start loading settings
   settingsPromise = (async () => {
     try {
-      const response = await fetch('/settings.json');
+      const response = await fetch(assetUrl('/settings.json'));
       if (response.ok) {
         const config = await response.json();
         settingsCache = config;

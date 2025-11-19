@@ -1,7 +1,7 @@
 {
-  "name": "Timeline - From Big Bang to Now",
-  "short_name": "Timeline",
-  "description": "Explore the complete timeline of the universe from the Big Bang to the present",
+  "name": "Timelines - From Big Bang to Now",
+  "short_name": "Timelines",
+  "description": "Explore the complete timelines of the universe from the Big Bang to the present",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

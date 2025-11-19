@@ -13,6 +13,7 @@ import { useAuth } from '@/lib/useAuth';
 import AuthInfo from '@/components/AuthInfo';
 import { categoryMatchesFilter } from '@/lib/categoryColors';
 import { getUiConfig, getDefaultTransform, getApiUrl } from '@/lib/settings';
+import { assetUrl } from '@/lib/basePath';
 
 const GeoMap = dynamic(() => import('@/components/GeoMap'), { ssr: false });
 
@@ -475,7 +476,7 @@ export default function Home() {
         style={{ top: '8px', left: '8px' }}
         title="Return to default view"
       >
-        <img src="/images/categories/now.svg" alt="Now" className="w-12 h-12" />
+        <img src={assetUrl("/images/categories/now.svg")} alt="Now" className="w-12 h-12" />
       </button>
 
       {/* Canvas Timeline - Always on LEFT side */}

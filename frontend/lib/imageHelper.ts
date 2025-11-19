@@ -1,4 +1,5 @@
 import { EventResponse } from '@/types';
+import { assetUrl } from './basePath';
 
 /**
  * Map event categories to appropriate colors and symbols
@@ -34,7 +35,10 @@ const generateSVGDataUri = (bgColor: string, symbol: string): string => {
  */
 export const getEventImageUrl = (event: EventResponse): string | null => {
   // Only return real image URLs - no placeholders or mocks
-  return event.image_url || null;
+  if (!event.image_url) return null;
+
+  // Apply basePath for GitHub Pages deployment
+  return assetUrl(event.image_url);
 };
 
 /**

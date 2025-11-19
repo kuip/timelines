@@ -5,6 +5,7 @@ import { EventResponse } from '@/types';
 import { calculateEventY, getDisplayableEvents } from '@/lib/coordinateHelper';
 import { getEventImageUrl } from '@/lib/imageHelper';
 import { getCategoryHierarchy, getCategoryColor, getCategoryColors } from '@/lib/categoryColors';
+import { assetUrl } from '@/lib/basePath';
 
 interface EventPanelProps {
   selectedEvent: EventResponse | null;
@@ -385,7 +386,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
     unix_seconds: realNowSeconds,
     formatted_time: getFormattedNowTime(),
     category: 'contemporary' as const,
-    image_url: '/images/categories/now.svg',
+    image_url: assetUrl('/images/categories/now.svg'),
   } as unknown as EventResponse;
 
   // Create Future Horizon event
@@ -551,7 +552,7 @@ const EventPanel: React.FC<EventPanelProps> = ({ selectedEvent, events, visibleE
                     >
                       {/* Event Image - Square container on left */}
                       {(() => {
-                        const imageUrl = event.image_url;
+                        const imageUrl = getEventImageUrl(event);
                         return imageUrl ? (
                           <div
                             onClick={(e) => {

@@ -5,7 +5,11 @@ const nextConfig = {
   images: {
     unoptimized: true,  // Required for static export
   },
-  // Disable trailing slashes to work better with GitHub Pages
+  // Base path for GitHub Pages deployment
+  // For user/org sites (username.github.io), leave empty
+  // For project sites (username.github.io/repo-name), use '/repo-name'
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH || '',
+  assetPrefix: process.env.NEXT_PUBLIC_BASE_PATH || '',
   trailingSlash: true,
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080',
